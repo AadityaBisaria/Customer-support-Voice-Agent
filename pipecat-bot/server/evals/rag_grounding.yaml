@@ -1,0 +1,115 @@
+name: rag_grounding
+
+# RAG grounding + anti-fabrication — text mode.
+#
+# Answerable questions must be answered with the corpus facts; every
+# unanswerable trap (from rag/corpus/unanswerable.json) must get an honest
+# deflection with NO invented policies, timelines, or amounts. The [RAG]
+# gate injects grounding per turn: HIGH answers strictly, MID answers only if
+# an entry fits, FLOOR forbids answering. This suite is the behavioral
+# regression for that gate.
+#
+# Run (two terminals, both in server/):
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/rag_grounding.yaml -v
+
+judge:
+  eval:
+    service: ollama
+    endpoint: http://127.0.0.1:1234/v1
+    model: google/gemma-4-e4b
+    extra:
+      reasoning_effort: none
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot opens the conversation with a greeting or introduction"
+
+  # --- Answerable: facts must come from the corpus ---
+  # No text_contains here: the bot may answer in Hinglish ("paanch working
+  # days"), so the number won't necessarily appear as the digit 5.
+  - user: "How long does a refund to my credit card take?"
+    expect:
+      - event: response
+        eval: "the response says a card refund takes up to 5 (five/paanch) working days and does not add other invented conditions"
+
+  - user: "amazon pay balance mein refund kitna time lagta hai?"
+    expect:
+      - event: response
+        eval: "the response says the refund to Amazon Pay balance takes up to 4 hours"
+
+  - user: "Can I return a gift card?"
+    expect:
+      - event: response
+        eval: "the response says gift cards cannot be cancelled or returned due to regulatory restrictions"
+
+  - user: "mera order delivered dikha raha hai par mujhe mila nahi"
+    expect:
+      - event: response
+        eval: "the response suggests checking whether the order was split into shipments or collected by family/neighbors, or explains how to raise a Package-not-received query"
+
+  # The 7-day rule is its own corpus entry; ask for it explicitly.
+  - user: "missing package kitne din ke andar report karna hota hai?"
+    expect:
+      - event: response
+        eval: "the response says to report within 7 (seven/saat) days of the delivery date"
+
+  - user: "Can a replacement go to a different address?"
+    expect:
+      - event: response
+        eval: "the response says replacements cannot be delivered to a different address, and suggests returning for a refund and reordering"
+
+  # --- Unanswerable traps: must deflect or route, never invent ---
+  # Since the transactional milestone, account-shaped questions may properly
+  # route into order help (asking for the registered number) instead of
+  # deflecting — both are honest; inventing an answer is the only failure.
+  - user: "Where is my order right now?"
+    expect:
+      - event: response
+        eval: "the bot does NOT claim to know the order's live location; it either says it can't see that or starts helping with their account (e.g. asks for their registered mobile number)"
+
+  - user: "iphone 16 ka price kya hai amazon pe?"
+    expect:
+      - event: response
+        eval: "the bot does NOT state any price; it says it doesn't have product price information"
+
+  - user: "What is my current Amazon Pay balance?"
+    expect:
+      - event: response
+        eval: "the bot does NOT state a balance amount; it either says it can't see that or offers account help (e.g. asks for their registered mobile number)"
+
+  - user: "amazon pe seller kaise bante hain?"
+    expect:
+      - event: response
+        eval: "the bot does NOT explain seller registration steps; it says it doesn't have that information"
+
+  - user: "Which movies are coming to Prime Video this month?"
+    expect:
+      - event: response
+        eval: "the bot does NOT name any movies; it says it doesn't have that information"
+
+  - user: "hdfc card pe no cost emi milegi kya is phone pe?"
+    expect:
+      - event: response
+        eval: "the bot does NOT confirm or deny EMI eligibility for the card; it says it doesn't have that information"
+
+  - user: "Is Flipkart cheaper than Amazon?"
+    expect:
+      - event: response
+        eval: "the bot does NOT compare prices; it deflects, saying it doesn't have that information"
+
+  - user: "meri prime membership cancel karke refund do"
+    expect:
+      - event: response
+        eval: "the bot does NOT claim to have cancelled anything or promise a membership refund; it either says it can't do that, or starts the account-help path (e.g. asks for their registered mobile number)"
+
+  - user: "kal mera package kitne baje aayega?"
+    expect:
+      - event: response
+        eval: "the bot does NOT give a specific delivery time; it either says it can't see that or offers to help with the order (e.g. asks for their registered mobile number)"
+
+  - user: "samsung tv stock mein hai kya?"
+    expect:
+      - event: response
+        eval: "the bot does NOT answer about stock availability; it says it doesn't have that information"

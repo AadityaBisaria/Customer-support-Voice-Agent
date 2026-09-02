@@ -1,0 +1,37 @@
+[project]
+name = "pipecat-bot"
+version = "0.1.0"
+description = "Voice AI bot built with Pipecat"
+requires-python = ">=3.12"
+dependencies = [
+    "pipecat-ai[cartesia,deepgram,evals,openai,runner,sarvam,silero,webrtc,websocket]>=1.8.1,<2",
+    # Daily transport: daily-python ships no Windows wheels, so it is installed only
+    # off-Windows (the Linux deploy image, macOS/Linux dev machines).
+    "daily-python>=0.32.0 ; sys_platform != 'win32'",
+    "pipecatcloud",
+    # RAG: in-process multilingual embeddings (ONNX) + cosine search over the QA corpus.
+    "fastembed>=0.7,<1",
+    "numpy>=1.26",
+    # IANA timezone data for ZoneInfo("Asia/Kolkata") — Windows ships none.
+    "tzdata>=2024.1",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.404,<2",
+    "ruff>=0.12.11,<1",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+[tool.ruff.lint]
+select = ["I", "UP"]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["dialogue", "language", "rag", "store", "flows"]
+markers = [
+    "slow: loads the real embedding model (downloads ~220MB on first run)",
+]

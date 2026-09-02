@@ -1,0 +1,72 @@
+name: hinglish_text
+
+# Adaptive Hinglish mirroring — text mode.
+#
+# Drives the language-band tracker with Hinglish, Hindi-heavy, and English
+# turns and asserts the bot's replies drift to match. Text mode bypasses
+# Sarvam STT/TTS entirely, so this tests the mirroring *decisions* (ratio ->
+# band -> [LANG-STYLE] directive -> LLM output), not codemix transcription —
+# that part is validated manually over webrtc, since the eval harness's
+# Kokoro voice can't speak Hinglish credibly.
+#
+# Run (two terminals, both in server/):
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/hinglish_text.yaml -v
+
+judge:
+  eval:
+    service: ollama
+    endpoint: http://127.0.0.1:1234/v1
+    model: google/gemma-4-e4b
+    extra:
+      reasoning_effort: none
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot opens the conversation with a greeting or introduction"
+
+  # Two Hinglish turns push the rolling estimate toward the HINGLISH band
+  # (the bot also starts there), so replies should mix Hindi and English.
+  - user: "mera order damaged aaya hai, mujhe return karna hai"
+    expect:
+      - event: response
+        eval: "the response mixes Hindi and English (Hinglish), with the Hindi in either Devanagari or romanized form; it is not pure English"
+
+  # Language only — content correctness is rag_grounding.yaml's job.
+  - user: "theek hai, aur refund kitne din mein milega mujhe?"
+    expect:
+      - event: response
+        eval: "the response is in Hinglish or Hindi (either script), not pure English"
+
+  # A run of Hindi-heavy turns should pull the bot toward mostly-Hindi.
+  - user: "मुझे समझ नहीं आया, दोबारा बताइए"
+    expect:
+      - event: response
+        eval: "the response is mostly in Hindi (Devanagari or romanized), with at most technical terms like order or refund in English"
+
+  - user: "अच्छा ठीक है, और अगर सामान खराब निकला तो क्या होगा?"
+    expect:
+      - event: response
+        eval: "the response is mostly in Hindi (Devanagari or romanized), not mostly English"
+
+  # A run of pure-English turns should pull the bot back toward English.
+  # The rolling estimate has deliberate inertia (no flapping), so full
+  # convergence to English takes a couple of turns.
+  - user: "Actually, let's switch to English. Can you tell me about gift card returns?"
+    expect:
+      - event: response
+        eval: "the response is understandable to an English speaker and is not written mostly in Devanagari"
+
+  # Transition turn: the estimate is still crossing from Hindi-heavy toward
+  # English, so Hinglish is acceptable here — the strict all-English check is
+  # the next turn.
+  - user: "Thanks. And how do I check the status of my return?"
+    expect:
+      - event: response
+        eval: "the response is NOT written mostly in Devanagari script (Hinglish or English is fine)"
+
+  - user: "Great, that's all I needed. One last thing, what items are non-returnable?"
+    expect:
+      - event: response
+        eval: "the response is mostly or entirely in English"

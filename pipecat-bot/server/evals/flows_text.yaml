@@ -1,0 +1,62 @@
+name: flows_text
+
+# Transactional happy path — text mode.
+#
+# Identify via spoken phone number (the PhoneSlot gate swallows the turn and
+# code does the lookup), then an order-status request that must route through
+# start_order_status and select the right order from the live enum.
+#
+# Run (two terminals, both in server/, PYTHONUTF8=1 on Windows):
+#   uv run bot.py -t eval
+#   uv run python -c "from pipecat.cli.main import run; run()" eval run evals/flows_text.yaml -v
+
+judge:
+  eval:
+    service: ollama
+    endpoint: http://127.0.0.1:1234/v1
+    model: google/gemma-4-e4b
+    extra:
+      reasoning_effort: none
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot opens the conversation with a greeting or introduction"
+
+  - user: "I need help with one of my orders"
+    expect:
+      - event: function_call
+        calls:
+          - name: start_order_help
+      - event: response
+        eval: "the bot asks the caller for their registered 10-digit mobile number"
+
+  # The PhoneSlot gate consumes this turn; code looks up the customer.
+  - user: "9 8 7 6 5 4 3 2 1 0"
+    expect:
+      - event: response
+        eval: "the bot greets the caller by name, Priya, and offers to help"
+
+  # Greedy decoding fixes the branch: the bot routes, then asks which order.
+  - user: "mera Echo Dot ka order kahan hai?"
+    expect:
+      - event: function_call
+        calls:
+          - name: start_order_status
+      - event: response
+        eval: "the bot asks which order the caller means or lists their orders"
+
+  - user: "Echo Dot wala order"
+    expect:
+      - event: function_call
+        calls:
+          - name: select_order
+            args:
+              order_id: "AMZ-1003"
+      - event: response
+        eval: "the bot says the Echo Dot order was delivered"
+
+  - user: "bas itna hi, thank you"
+    expect:
+      - event: response
+        eval: "the bot responds politely (a goodbye or an offer for anything else)"

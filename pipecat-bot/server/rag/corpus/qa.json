@@ -1,0 +1,452 @@
+{
+  "version": 1,
+  "sources": {
+    "faq": "https://www.amazon.in/gp/help/customer/display.html?nodeId=202115040",
+    "returns_policy": "https://www.amazon.in/gp/help/customer/display.html?nodeId=202111910",
+    "refunds": "https://www.amazon.in/gp/help/customer/display.html?nodeId=G5PG8UG3E7SHGKA6",
+    "replacement_policy": "https://www.amazon.in/gp/help/customer/display.html?nodeId=202111750",
+    "missing_package": "https://www.amazon.in/gp/help/customer/display.html?nodeId=GCU8BWGTQNJKQEBS"
+  },
+  "entries": [
+    {
+      "id": "qa-001",
+      "question": "What items can I return?",
+      "paraphrases": ["kaunse items return kar sakte hain", "कौन से सामान वापस कर सकते हैं"],
+      "answer": "You can return items marked as returnable on the product page, within their return window. Items that arrived damaged, defective, with missing parts, or different from the description are eligible, and you can also return a returnable item if you simply changed your mind.",
+      "tags": ["returns"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-002",
+      "question": "Which items are non-returnable?",
+      "paraphrases": ["kaunse products return nahi hote", "कौन से प्रोडक्ट वापस नहीं होते"],
+      "answer": "Consumable items like wax candles, pet food, grooming products, cleaning products, and fertilizers are non-returnable. The product page shows whether an item is returnable before you buy it.",
+      "tags": ["returns"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-003",
+      "question": "How do I return an item?",
+      "paraphrases": ["return kaise karte hain order", "ऑर्डर रिटर्न कैसे करें"],
+      "answer": "Sign in to Amazon, go to Your Orders, select the item you want to return, pick a reason from the menu, and follow the on-screen instructions.",
+      "tags": ["returns"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-004",
+      "question": "Where can I check the status of my return?",
+      "paraphrases": ["mera return ka status kahan dekhun", "मेरे रिटर्न का स्टेटस कहाँ देखूँ"],
+      "answer": "Go to Your Orders, find the order you returned, and select Return or Refund status. You can also manage all your returns from the Returns Center.",
+      "tags": ["returns"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-005",
+      "question": "Can I return a gift I received?",
+      "paraphrases": ["gift wapas kar sakte hain kya", "गिफ्ट वापस कर सकते हैं क्या"],
+      "answer": "Yes, if the item is eligible for return and the sender shared a Gift Receipt with you, you can return the gift in exchange for an Amazon Pay Gift Card.",
+      "tags": ["returns", "gifts"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-006",
+      "question": "Can I return or cancel a gift card?",
+      "paraphrases": ["gift card cancel ya return ho sakta hai", "गिफ्ट कार्ड कैंसिल या रिटर्न हो सकता है"],
+      "answer": "No, gift cards once purchased cannot be cancelled or returned, due to regulatory restrictions.",
+      "tags": ["returns", "gifts"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-007",
+      "question": "When can my order be replaced?",
+      "paraphrases": ["replacement kab milta hai order ka", "ऑर्डर का रिप्लेसमेंट कब मिलता है"],
+      "answer": "You can request a replacement if the item arrived damaged or defective, doesn't match the product description, or is missing parts or accessories. It's free if the same seller still has the exact same item in stock.",
+      "tags": ["replacement"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-008",
+      "question": "Can a replacement be delivered to a different address?",
+      "paraphrases": ["replacement dusre address pe aa sakta hai kya", "रिप्लेसमेंट दूसरे पते पर आ सकता है क्या"],
+      "answer": "No, replacements can only go to the original address. If you need a different address, return the item for a refund and place a new order with the new address.",
+      "tags": ["replacement"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-009",
+      "question": "What can I do if I received the wrong item?",
+      "paraphrases": ["galat item aa gaya kya karun", "गलत सामान आ गया क्या करूँ"],
+      "answer": "You can return the wrong item or request a replacement. Just keep it in its original condition and packaging to be eligible.",
+      "tags": ["returns", "replacement"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-010",
+      "question": "Will the shipping charge be refunded for orders under 499 rupees?",
+      "paraphrases": ["499 se kam order pe shipping charge wapas milega kya", "शिपिंग चार्ज वापस मिलेगा क्या"],
+      "answer": "If your order was below 499 rupees, a 40 rupee shipping fee applies, and that fee is not refunded when a replacement is sent by standard shipping.",
+      "tags": ["refunds", "shipping"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-011",
+      "question": "The warranty card or user manual is missing from my package. Can I get a refund?",
+      "paraphrases": ["warranty card nahi mila refund milega kya", "वारंटी कार्ड नहीं मिला रिफंड मिलेगा क्या"],
+      "answer": "A missing warranty card or manual doesn't need a refund or replacement, because the invoice is sufficient to claim the warranty. You can check what's included under the What's in the Box section on the product page.",
+      "tags": ["returns", "warranty"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-012",
+      "question": "I received an empty package or something is missing from the box. What do I do?",
+      "paraphrases": ["package khali nikla ya kuch missing hai", "पैकेज खाली निकला या कुछ गायब है"],
+      "answer": "You can request a refund if the box was tampered with and the item is missing, if the package arrived empty, or if an accessory from the order is missing. Amazon may ask for an identity proof to process it, but never share your Aadhaar data.",
+      "tags": ["returns", "refunds"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-013",
+      "question": "I only received part of my order. Where is the rest?",
+      "paraphrases": ["order ka kuch hi saman aya baaki kahan hai", "ऑर्डर का कुछ ही सामान आया बाकी कहाँ है"],
+      "answer": "Orders are sometimes split into multiple shipments, so items can arrive separately. Each package arrives by the date shown on your Your Orders page.",
+      "tags": ["delivery"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-014",
+      "question": "How are refunds paid for Pay on Delivery orders?",
+      "paraphrases": ["cash on delivery ka refund kaise milta hai", "कैश ऑन डिलीवरी का रिफंड कैसे मिलता है"],
+      "answer": "For Pay on Delivery orders, refunds go either to your bank account through NEFT transfer or to your Amazon account as Amazon Pay balance.",
+      "tags": ["refunds"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-015",
+      "question": "The seller is not responding to my query. What can I do?",
+      "paraphrases": ["seller reply nahi kar raha kya karun", "सेलर जवाब नहीं दे रहा क्या करूँ"],
+      "answer": "If a seller doesn't address your query within three business days, you can file an A-to-Z Guarantee claim for that order.",
+      "tags": ["sellers", "guarantee"],
+      "source": "faq"
+    },
+    {
+      "id": "qa-016",
+      "question": "What conditions must a return meet to be accepted?",
+      "paraphrases": ["return accept hone ke liye kya conditions hain", "रिटर्न की शर्तें क्या हैं"],
+      "answer": "The product must not have been damaged while with you, must be the same item that was shipped, and must be in original condition with the brand box, MRP tag, user manual, warranty card, and all accessories.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-017",
+      "question": "Should I do anything before returning an electronic device?",
+      "paraphrases": ["phone ya laptop return karne se pehle kya karna chahiye", "फोन लौटाने से पहले क्या करना चाहिए"],
+      "answer": "Yes, remove all your personal information from the device before returning it. Amazon is not liable for any misuse of data left on a returned device.",
+      "tags": ["returns", "devices"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-018",
+      "question": "My item is marked non-returnable but it arrived damaged. What now?",
+      "paraphrases": ["non returnable item kharab nikla to kya hoga", "नॉन रिटर्नेबल सामान खराब निकला तो"],
+      "answer": "Even for non-returnable products, if the item arrived damaged, defective, or wrong, Amazon provides a full refund or replacement. Contact them within 5 days of delivery, and they may verify the damage first.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-019",
+      "question": "Is there a penalty for returning too many orders?",
+      "paraphrases": ["zyada returns karne pe kya hota hai", "ज़्यादा रिटर्न करने पर क्या होता है"],
+      "answer": "Yes, if returns or cancellations are excessive, Amazon can warn, suspend, or terminate the account, and can charge a return processing fee that is deducted from the refund.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-020",
+      "question": "What happens if my replacement item is out of stock?",
+      "paraphrases": ["replacement stock mein nahi hai to kya milega", "रिप्लेसमेंट स्टॉक में नहीं है तो क्या मिलेगा"],
+      "answer": "A replacement needs the exact same item in stock with the same seller. If it's out of stock, you get a refund for the returned item instead.",
+      "tags": ["replacement"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-021",
+      "question": "Can international customers return orders?",
+      "paraphrases": ["bahar se order kiya hai return ho sakta hai kya", "विदेश से ऑर्डर रिटर्न हो सकता है क्या"],
+      "answer": "Orders by international customers aren't eligible for returns, but they are eligible for refunds. Contact customer service within 5 business days of the delivery date to claim one.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-022",
+      "question": "What does the 10 or 30 days returnable policy mean?",
+      "paraphrases": ["10 30 days returnable ka matlab kya hai", "रिटर्नेबल पॉलिसी का मतलब क्या है"],
+      "answer": "It means free return or replacement within 10 or 30 days of delivery if the item arrived damaged, defective, or different, and you can also return it in that window for a full refund. Keep the item in original condition with the brand box, MRP tags, and accessories.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-023",
+      "question": "What does the 7 or 10 days replacement policy mean?",
+      "paraphrases": ["7 10 days replacement ka matlab kya hai", "रिप्लेसमेंट पॉलिसी का मतलब"],
+      "answer": "The item can be replaced free within 7 or 10 days of delivery if it arrived damaged, defective, or wrong, but it can't be returned for a change-of-mind refund. Keep it in original condition with MRP tags, manual, warranty cards, and accessories.",
+      "tags": ["replacement", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-024",
+      "question": "What is the service centre replacement policy?",
+      "paraphrases": ["service centre replacement policy kya hai", "सर्विस सेंटर रिप्लेसमेंट पॉलिसी क्या है"],
+      "answer": "For defective items under this policy, you reach out to the brand's service centre, and the final resolution like repair, refund, or replacement comes from the brand. For damaged or wrong items delivered, you still get a free replacement within 7 or 10 days.",
+      "tags": ["replacement", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-025",
+      "question": "Can I exchange an item for a different size or color?",
+      "paraphrases": ["size ya color exchange kar sakte hain kya", "साइज़ या कलर एक्सचेंज कर सकते हैं क्या"],
+      "answer": "Items with the 10 Day Free Returns and Exchange policy can be exchanged for a different size or color within 10 days, based on availability, or returned for a full refund.",
+      "tags": ["returns", "exchange"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-026",
+      "question": "What is the return policy for Echo, Fire TV, and Kindle devices?",
+      "paraphrases": ["echo alexa kindle ka return policy kya hai", "इको या किंडल की रिटर्न पॉलिसी क्या है"],
+      "answer": "Echo and Alexa devices, Fire TV Stick, Kindle e-readers, and their Amazon accessories have a 7 days replacement-only policy — no returns for refund.",
+      "tags": ["devices", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-027",
+      "question": "Can I get a refund for a Kindle book I bought by mistake?",
+      "paraphrases": ["galti se kindle book kharid li refund milega", "गलती से किंडल बुक खरीद ली रिफंड मिलेगा"],
+      "answer": "Yes, Kindle books are eligible for a refund for accidental orders within seven days of purchase.",
+      "tags": ["devices", "refunds"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-028",
+      "question": "Can I get a refund on Alexa paid skills?",
+      "paraphrases": ["alexa paid skill ka refund milta hai kya", "एलेक्सा पेड स्किल का रिफंड मिलता है क्या"],
+      "answer": "Yes, paid skills are eligible for a full refund within 3 days of purchase by contacting Amazon customer support. Subscription in-skill purchases also get a full refund within 3 days, but one-time consumable in-skill purchases are non-returnable.",
+      "tags": ["devices", "refunds"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-029",
+      "question": "What is the return policy for Inspect and Buy products?",
+      "paraphrases": ["inspect and buy wale product ki policy kya hai", "इंस्पेक्ट एंड बाय की पॉलिसी क्या है"],
+      "answer": "Products with the Inspect and Buy label have a 2 days refund-only policy.",
+      "tags": ["policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-030",
+      "question": "Can customized products be returned?",
+      "paraphrases": ["customized product return hota hai kya", "कस्टमाइज़्ड प्रोडक्ट रिटर्न होता है क्या"],
+      "answer": "No, customizable products are non-returnable. But if the item arrives damaged, defective, or with wrong customization, Amazon provides a full refund, and you can also request it under an A-to-Z Guarantee claim.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-031",
+      "question": "I shared the OTP after inspecting my delivery. Can I still return it as damaged?",
+      "paraphrases": ["inspection ke baad otp de diya ab return hoga kya", "इंस्पेक्शन के बाद ओटीपी दे दिया अब रिटर्न होगा क्या"],
+      "answer": "No. If the item came with Inspection Service and you shared the OTP after verifying it wasn't wrong, damaged, or missing accessories, you can't return it later on those grounds.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-032",
+      "question": "I ordered the wrong model or color by mistake. Can I return it?",
+      "paraphrases": ["galat model color order ho gaya return hoga kya", "गलत मॉडल ऑर्डर हो गया रिटर्न होगा क्या"],
+      "answer": "Buyer's remorse cases like ordering the incorrect model or color may not be eligible for return — it depends on the item's return policy type shown on the product page. Items with a returnable policy can still be returned within their window.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-033",
+      "question": "When does my refund get initiated?",
+      "paraphrases": ["refund kab initiate hota hai", "रिफंड कब शुरू होता है"],
+      "answer": "Amazon initiates the refund once your returned package is picked up and received back. Refund requests are processed within 13 days of a successful pickup.",
+      "tags": ["refunds"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-034",
+      "question": "How long does a refund to Amazon Pay balance take?",
+      "paraphrases": ["amazon pay balance mein refund kitne time mein aata hai", "अमेज़न पे बैलेंस में रिफंड कितने समय में आता है"],
+      "answer": "Refunds to Amazon Pay balance take up to 4 hours after the refund is initiated. Amazon vouchers are also up to 4 hours.",
+      "tags": ["refunds", "timelines"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-035",
+      "question": "How long does a refund to my card, UPI, or bank account take?",
+      "paraphrases": ["card ya upi mein refund kitne din mein aayega", "कार्ड या यूपीआई में रिफंड कितने दिन में आएगा"],
+      "answer": "Refunds to credit or debit cards, UPI-linked bank accounts, and net banking all take up to 5 working days after the refund is initiated.",
+      "tags": ["refunds", "timelines"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-036",
+      "question": "How long does a Pay on Delivery refund take?",
+      "paraphrases": ["cash on delivery ka refund kitne din mein milta hai", "कैश ऑन डिलीवरी का रिफंड कितने दिन में मिलता है"],
+      "answer": "For Pay on Delivery orders, a bank transfer by NEFT takes up to 5 working days, Amazon Pay balance up to 4 hours, and a paper cheque up to 10 working days.",
+      "tags": ["refunds", "timelines"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-037",
+      "question": "The order says refunded but the money hasn't reached my account.",
+      "paraphrases": ["refund show ho raha hai par paise nahi aaye", "रिफंड दिख रहा है पर पैसे नहीं आए"],
+      "answer": "If the order shows refunded but the money hasn't arrived within the expected time, contact your bank with the Refund Reference Number, called RRN, shown in the Refunds section of your transaction history.",
+      "tags": ["refunds"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-038",
+      "question": "It's been many days since pickup and no refund update. What do I do?",
+      "paraphrases": ["pickup ke baad bhi refund nahi aaya kya karun", "पिकअप के बाद भी रिफंड नहीं आया क्या करूँ"],
+      "answer": "If you haven't received any refund update within 13 days of a successful pickup, reach out to Amazon customer service for assistance.",
+      "tags": ["refunds"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-039",
+      "question": "How do I add a bank account to receive my refund?",
+      "paraphrases": ["refund ke liye bank account kaise add karun", "रिफंड के लिए बैंक अकाउंट कैसे जोड़ें"],
+      "answer": "Go to Your Orders, open the order you're returning, choose Return or Replacement items, select Refund to your bank account, then Choose a bank account and Add a new bank account with your details.",
+      "tags": ["refunds"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-040",
+      "question": "How do refunds work for Amazon Pay Later orders?",
+      "paraphrases": ["amazon pay later ka refund kaise hota hai", "अमेज़न पे लेटर का रिफंड कैसे होता है"],
+      "answer": "If you haven't paid any installment yet, your Pay Later limit is credited with the order value. If you've already made a payment, the amount goes back to your bank account and your credit limit is reinstated.",
+      "tags": ["refunds", "paylater"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-041",
+      "question": "How do refunds work for EMI purchases?",
+      "paraphrases": ["emi pe kharida tha refund kaise milega", "ईएमआई पर खरीदा था रिफंड कैसे मिलेगा"],
+      "answer": "Any EMI amount you already paid is refunded to your credit card and the loan is cancelled. Your bank may charge a small pre-closure fee if an EMI was already paid, so contact your card issuer to close it.",
+      "tags": ["refunds", "emi"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-042",
+      "question": "Who issues the refund for seller-fulfilled orders?",
+      "paraphrases": ["seller wale order ka refund kaun deta hai", "सेलर वाले ऑर्डर का रिफंड कौन देता है"],
+      "answer": "Refunds for orders sold and shipped by seller partners are initiated by the seller directly, and their terms can vary by seller. All seller-fulfilled orders are still covered by the A-to-Z Guarantee for missing or incorrect orders.",
+      "tags": ["refunds", "sellers"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-043",
+      "question": "How do I check the status of my refund?",
+      "paraphrases": ["refund ka status kaise check karun", "रिफंड का स्टेटस कैसे चेक करें"],
+      "answer": "Open Your Orders, click on the relevant order, and select View Return slash Refund Status.",
+      "tags": ["refunds"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-044",
+      "question": "Which items get a free replacement?",
+      "paraphrases": ["free replacement kis pe milta hai", "फ्री रिप्लेसमेंट किस पर मिलता है"],
+      "answer": "Items Fulfilled by Amazon, Prime eligible items, and a few seller-fulfilled items are eligible for free replacement, as long as the exact same item is in stock with the same seller.",
+      "tags": ["replacement"],
+      "source": "replacement_policy"
+    },
+    {
+      "id": "qa-045",
+      "question": "What are the conditions for a free replacement?",
+      "paraphrases": ["free replacement ki conditions kya hain", "फ्री रिप्लेसमेंट की शर्तें क्या हैं"],
+      "answer": "The item must be within its return window and in stock with the same seller, and the issue must be physical damage, missing parts, a defect, or a different item than described. The replacement ships by standard shipping once the original is returned.",
+      "tags": ["replacement"],
+      "source": "replacement_policy"
+    },
+    {
+      "id": "qa-046",
+      "question": "Can I get a second replacement for the same item?",
+      "paraphrases": ["dobara replacement mil sakta hai kya", "दोबारा रिप्लेसमेंट मिल सकता है क्या"],
+      "answer": "No, an item that was already returned and replaced once can't get another free replacement. You can still return it for a refund if it's eligible.",
+      "tags": ["replacement"],
+      "source": "replacement_policy"
+    },
+    {
+      "id": "qa-047",
+      "question": "My item has missing accessories. Is replacement the only option?",
+      "paraphrases": ["accessories missing hain kya karun replacement ke alawa", "एक्सेसरीज़ गायब हैं क्या करूँ"],
+      "answer": "For missing parts or accessories you can request a free replacement, try contacting the manufacturer using the contact info on the packaging, or simply return the item for a refund.",
+      "tags": ["replacement"],
+      "source": "replacement_policy"
+    },
+    {
+      "id": "qa-048",
+      "question": "My order shows delivered but I never received it.",
+      "paraphrases": ["order delivered dikha raha hai par mila nahi", "ऑर्डर डिलीवर दिखा रहा है पर मिला नहीं"],
+      "answer": "First check whether the order was split into multiple shipments and whether family, neighbors, or reception collected it. If it's still missing, use Contact Us, then Chat with Us, describe the issue as Package not received, and raise a query.",
+      "tags": ["delivery", "missing"],
+      "source": "missing_package"
+    },
+    {
+      "id": "qa-049",
+      "question": "How long do I have to report a missing package that shows delivered?",
+      "paraphrases": ["missing package kitne din mein report karna hota hai", "मिसिंग पैकेज कितने दिन में रिपोर्ट करना होता है"],
+      "answer": "Report it within 7 days from the date of delivery. Queries submitted after 7 days are not eligible for rescue.",
+      "tags": ["delivery", "missing"],
+      "source": "missing_package"
+    },
+    {
+      "id": "qa-050",
+      "question": "My Pay on Delivery order shows delivered but I didn't get it.",
+      "paraphrases": ["cod order delivered dikha raha par nahi mila", "सीओडी ऑर्डर डिलीवर दिखा पर नहीं मिला"],
+      "answer": "Pay on Delivery orders are not eligible for the missing-package rescue process. In that case you'd need to place a new order.",
+      "tags": ["delivery", "missing"],
+      "source": "missing_package"
+    },
+    {
+      "id": "qa-051",
+      "question": "What happens after I raise a query for a missing package?",
+      "paraphrases": ["query raise karne ke baad kya hota hai", "क्वेरी डालने के बाद क्या होता है"],
+      "answer": "You get a confirmation with a resolution date, and the delivery team investigates. The status moves from submitted, to under review, to resolution ready — and if there's no update within 2 business days, contact customer support.",
+      "tags": ["delivery", "missing"],
+      "source": "missing_package"
+    },
+    {
+      "id": "qa-052",
+      "question": "My missing order was from a third-party seller. What do I do?",
+      "paraphrases": ["third party seller ka order nahi mila kya karun", "थर्ड पार्टी सेलर का ऑर्डर नहीं मिला"],
+      "answer": "Contact the seller through Your Orders and give them up to 3 business days to respond. If they don't, you can file a claim under the A-to-Z Guarantee.",
+      "tags": ["delivery", "sellers", "guarantee"],
+      "source": "missing_package"
+    },
+    {
+      "id": "qa-053",
+      "question": "Does someone check the product before approving my return?",
+      "paraphrases": ["return se pehle checking hoti hai kya", "रिटर्न से पहले जांच होती है क्या"],
+      "answer": "Yes, Amazon carries out verification checks and may contact you or pick up the product to verify the damage or defect before issuing a refund or replacement. For some appliances they may schedule a technician visit first.",
+      "tags": ["returns", "policy"],
+      "source": "returns_policy"
+    },
+    {
+      "id": "qa-054",
+      "question": "What is the A-to-Z Guarantee?",
+      "paraphrases": ["a to z guarantee kya hoti hai", "ए टू ज़ेड गारंटी क्या होती है"],
+      "answer": "The A-to-Z Guarantee protects you on seller-fulfilled orders — it offers reimbursement when a seller can't resolve a missing or incorrect order.",
+      "tags": ["guarantee", "sellers"],
+      "source": "refunds"
+    },
+    {
+      "id": "qa-055",
+      "question": "Is there a technician visit for large appliance issues?",
+      "paraphrases": ["fridge tv kharab hai technician aayega kya", "फ्रिज या टीवी खराब है टेक्नीशियन आएगा क्या"],
+      "answer": "Yes, for issues with a smartphone, tablet, laptop, TV, AC, refrigerator, washing machine, or microwave, Amazon may schedule a technician visit to your location, depending on your pin code. The resolution is then based on the technician's evaluation report.",
+      "tags": ["returns", "devices"],
+      "source": "returns_policy"
+    }
+  ]
+}

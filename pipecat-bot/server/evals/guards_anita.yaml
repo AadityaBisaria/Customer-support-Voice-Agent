@@ -1,0 +1,93 @@
+name: guards_anita
+
+# Policy guard rails on Anita's seeded account:
+#   - sandals delivered 25 days ago -> return refused in code, window closed
+#   - desk lamp damaged but variant out of stock -> replacement withheld by
+#     policy, refund offered instead
+#   - no cancellable orders -> refused before any selection
+#
+# Run (two terminals, both in server/, PYTHONUTF8=1 on Windows):
+#   uv run bot.py -t eval
+#   uv run python -c "from pipecat.cli.main import run; run()" eval run evals/guards_anita.yaml -v
+
+judge:
+  eval:
+    service: ollama
+    endpoint: http://127.0.0.1:1234/v1
+    model: google/gemma-4-e4b
+    extra:
+      reasoning_effort: none
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot opens the conversation with a greeting or introduction"
+
+  - user: "I need help with my orders"
+    expect:
+      - event: response
+        eval: "the bot asks for the registered mobile number"
+
+  - user: "9 0 0 0 0 0 0 0 0 1"
+    expect:
+      - event: response
+        eval: "the bot greets the caller by name, Anita"
+
+  # Out-of-window return, refused deterministically with the closing date.
+  # Deterministic check: the order listing always carries the sandals id.
+  - user: "mujhe apne leather sandals return karne hain"
+    expect:
+      - event: function_call
+        calls:
+          - name: start_return_or_exchange
+      - event: response
+        text_contains: "AMZ-3001"
+
+  - user: "leather sandals wala order"
+    expect:
+      - event: function_call
+        calls:
+          - name: select_order
+            args:
+              order_id: "AMZ-3001"
+      - event: response
+        eval: "the bot asks why they want to return the sandals"
+
+  - user: "ab zaroorat nahi hai"
+    expect:
+      - event: response
+        eval: "the bot says the return window for this item has closed and the return is not possible; it does NOT create a return"
+
+  # The damaged lamp, whose variant is out of stock: replacement withheld by
+  # policy, refund offered. Wrap nodes carry the routing tools directly, so
+  # this is one hop from the refusal above.
+  - user: "theek hai. mera desk lamp damaged aaya tha, uska replacement chahiye"
+    expect:
+      - event: response
+        eval: "the bot makes progress on the desk lamp request: it asks which order, asks for the reason, or already explains what is possible for it"
+
+  - user: "damaged hai, isliye replacement chahiye"
+    expect:
+      - event: response
+        eval: "the bot explains a replacement is not possible because the same item is not in stock with the seller, and offers a refund instead; it does NOT arrange a replacement"
+
+  # Take the refund through the confirm gate...
+  - user: "haan, refund hi le lungi"
+    expect:
+      - event: response
+        eval: "the bot reads back the desk lamp return with the refund amount of 899 rupees and asks for a clear yes or no"
+
+  - user: "haan kar do"
+    expect:
+      - event: response
+        eval: "the bot confirms the return was created with a reference starting RET- and mentions the refund"
+
+  # ...and from the done node (which carries the routing tools), the last
+  # guard: nothing on this account can still be cancelled.
+  - user: "aur mujhe ek order cancel karna hai"
+    expect:
+      - event: function_call
+        calls:
+          - name: start_cancel_order
+      - event: response
+        eval: "the bot says there are no orders that can still be cancelled, because cancellation is only possible before shipping"

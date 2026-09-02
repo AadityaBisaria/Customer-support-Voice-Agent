@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "comment": "Trap questions a caller plausibly asks but the corpus cannot answer. NEVER embedded into the index — used only for threshold tuning and the no-fabrication evals. The bot must deflect on every one of these.",
+  "entries": [
+    {
+      "id": "un-001",
+      "question": "Where is my order right now?",
+      "paraphrases": ["mera order abhi kahan hai", "मेरा ऑर्डर अभी कहाँ है"]
+    },
+    {
+      "id": "un-002",
+      "question": "When exactly will my package be delivered tomorrow?",
+      "paraphrases": ["kal mera package kitne baje aayega", "कल मेरा पैकेज कितने बजे आएगा"]
+    },
+    {
+      "id": "un-003",
+      "question": "What is the price of the iPhone 16 on Amazon?",
+      "paraphrases": ["iphone 16 ka price kya hai amazon pe", "आईफोन सोलह का प्राइस क्या है"]
+    },
+    {
+      "id": "un-004",
+      "question": "Is the Samsung 55 inch TV in stock right now?",
+      "paraphrases": ["samsung tv stock mein hai kya abhi", "सैमसंग टीवी स्टॉक में है क्या"]
+    },
+    {
+      "id": "un-005",
+      "question": "How do I become a seller on Amazon?",
+      "paraphrases": ["amazon pe seller kaise bante hain", "अमेज़न पर सेलर कैसे बनते हैं"]
+    },
+    {
+      "id": "un-006",
+      "question": "Which movies are coming to Prime Video this month?",
+      "paraphrases": ["prime video pe is mahine kaunsi movie aa rahi hai", "प्राइम वीडियो पर कौन सी मूवी आ रही है"]
+    },
+    {
+      "id": "un-007",
+      "question": "Can I get no cost EMI on my HDFC card for this phone?",
+      "paraphrases": ["hdfc card pe no cost emi milegi kya", "एचडीएफसी कार्ड पर नो कॉस्ट ईएमआई मिलेगी क्या"]
+    },
+    {
+      "id": "un-008",
+      "question": "Is Flipkart cheaper than Amazon for electronics?",
+      "paraphrases": ["flipkart sasta hai ya amazon", "फ्लिपकार्ट सस्ता है या अमेज़न"]
+    },
+    {
+      "id": "un-009",
+      "question": "What is my current Amazon Pay balance?",
+      "paraphrases": ["mera amazon pay balance kitna hai", "मेरा अमेज़न पे बैलेंस कितना है"]
+    },
+    {
+      "id": "un-010",
+      "question": "Cancel my Prime membership and give me a refund for it.",
+      "paraphrases": ["meri prime membership cancel karke refund do", "मेरी प्राइम मेंबरशिप कैंसिल करके रिफंड दो"]
+    }
+  ]
+}

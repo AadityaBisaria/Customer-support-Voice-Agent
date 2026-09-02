@@ -1,0 +1,48 @@
+name: guards
+
+# The deterministic guard rails, driven as a caller would hit them (Anita's
+# account is seeded to trip every one):
+#   - wrong phone number twice -> KB-only mode (still answers policy questions)
+#   - out-of-window return -> refused in code with the closing date
+#   - damaged item with the variant out of stock -> replacement withheld,
+#     refund offered instead
+#   - nothing cancellable -> refused before any selection
+#
+# Run (two terminals, both in server/, PYTHONUTF8=1 on Windows):
+#   uv run bot.py -t eval
+#   uv run python -c "from pipecat.cli.main import run; run()" eval run evals/guards.yaml -v
+
+judge:
+  eval:
+    service: ollama
+    endpoint: http://127.0.0.1:1234/v1
+    model: google/gemma-4-e4b
+    extra:
+      reasoning_effort: none
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot opens the conversation with a greeting or introduction"
+
+  - user: "help with my order please"
+    expect:
+      - event: response
+        eval: "the bot asks for the registered mobile number"
+
+  # Wrong number twice -> kb_only. (Each is consumed by the phone gate.)
+  - user: "9 9 9 9 9 9 9 9 9 1"
+    expect:
+      - event: response
+        eval: "the bot says the number didn't match and asks again"
+
+  - user: "9 9 9 9 9 9 9 9 9 2"
+    expect:
+      - event: response
+        eval: "the bot apologizes that it could not verify the account and says it can still answer general policy questions"
+
+  # KB-only mode must still answer policy questions from the corpus.
+  - user: "ok then, can I return a gift card?"
+    expect:
+      - event: response
+        eval: "the bot answers that gift cards cannot be cancelled or returned"

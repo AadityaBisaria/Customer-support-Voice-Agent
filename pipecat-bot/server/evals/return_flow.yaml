@@ -1,0 +1,91 @@
+name: return_flow
+
+# A full return, end to end: route -> select order -> reason -> resolution ->
+# templated readback -> deterministic confirm.
+#
+# The "hmm" turn proves the consent rule: a backchannel is NOT a yes — the
+# bot re-asks and no function call happens. Only the explicit "haan kar do"
+# executes, and the reply must carry the real RET- reference from the store.
+#
+# Run (two terminals, both in server/, PYTHONUTF8=1 on Windows):
+#   uv run bot.py -t eval
+#   uv run python -c "from pipecat.cli.main import run; run()" eval run evals/return_flow.yaml -v
+
+judge:
+  eval:
+    service: ollama
+    endpoint: http://127.0.0.1:1234/v1
+    model: google/gemma-4-e4b
+    extra:
+      reasoning_effort: none
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot opens the conversation with a greeting or introduction"
+
+  - user: "mujhe apna ek order return karna hai"
+    expect:
+      - event: response
+        eval: "the bot asks for the caller's registered mobile number"
+
+  - user: "nine eight seven six five four three two one zero"
+    expect:
+      - event: response
+        eval: "the bot greets Priya by name"
+
+  - user: "mujhe apne running shoes return karne hain"
+    expect:
+      - event: function_call
+        calls:
+          - name: start_return_or_exchange
+      - event: response
+        eval: "the bot asks which order or lists the caller's delivered orders"
+
+  # The shoes order has a single item, so code skips item selection and the
+  # bot asks for the reason right after selection.
+  - user: "running shoes wala order"
+    expect:
+      - event: function_call
+        calls:
+          - name: select_order
+            args:
+              order_id: "AMZ-1002"
+      - event: response
+        eval: "the bot asks for the reason for the return"
+
+  - user: "size chhota hai, fit nahi hua"
+    expect:
+      - event: function_call
+        calls:
+          - name: select_reason
+            args:
+              reason: "size_issue"
+      - event: response
+        eval: "the bot offers a refund (a size issue on this item allows refund only) and asks the user to confirm the choice"
+
+  - user: "haan refund de do"
+    expect:
+      - event: function_call
+        calls:
+          - name: select_resolution
+            args:
+              resolution: "refund"
+      - event: response
+        eval: "the bot reads back the return details — the running shoes, the refund amount of 2599 rupees — and asks for a clear yes or no"
+
+  # Backchannel: NOT consent. The gate passes it through, the toolless
+  # confirm node re-asks, and nothing executes. (No function_call-absent
+  # assertion here: the harness matches expectations in order and an absent-
+  # window would swallow the concurrent response event. The no-execution
+  # guarantee is asserted deterministically in flows/tests/test_confirm.py.)
+  - user: "hmm"
+    expect:
+      - event: response
+        eval: "the bot asks again for a clear yes or no confirmation; it does NOT say the return was created"
+
+  # Explicit consent: the gate consumes the turn and code creates the return.
+  - user: "haan kar do"
+    expect:
+      - event: response
+        eval: "the bot confirms the return is created with a reference starting RET-, mentions pickup, and mentions the refund"
