@@ -50,6 +50,9 @@ from .domain import (
     ReturnStatus,
     VariantId,
 )
+from schemas import CancelResult as SchemaCancelResult
+from schemas import RefundInfo as SchemaRefundInfo
+from schemas import ReturnResult as SchemaReturnResult
 from .policy import (
     PolicyError,
     check_cancellable,
@@ -120,7 +123,7 @@ MIGRATIONS: list[str] = [
       return_request_id TEXT REFERENCES return_requests(id),
       origin TEXT NOT NULL CHECK (origin IN ('return','cancellation')),
       amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
-      method TEXT NOT NULL CHECK (method IN ('amazon_pay','card','upi','netbanking','neft','cheque')),
+    method TEXT NOT NULL CHECK (method IN ('amazon_pay','card','upi','netbanking')),
       status TEXT NOT NULL DEFAULT 'initiated' CHECK (status IN ('initiated','processed','completed')),
       initiated_at TEXT NOT NULL, expected_by TEXT NOT NULL,
       CHECK ((origin = 'return') = (return_request_id IS NOT NULL))
@@ -163,56 +166,67 @@ def connect(path: str = ":memory:") -> sqlite3.Connection:
 def _refund_info_to_json(info: RefundInfo | None) -> dict | None:
     if info is None:
         return None
-    return {
-        "refund_id": info.refund_id,
-        "amount_paise": info.amount.paise,
-        "method": info.method.value,
-        "expected_by": to_utc_iso(info.expected_by),
-    }
+    payload = SchemaRefundInfo.model_validate(info, from_attributes=True)
+    return payload.model_dump(mode="json")
 
 
 def _refund_info_from_json(data: dict | None) -> RefundInfo | None:
     if data is None:
         return None
+    amount_data = data.get("amount")
+    if amount_data is not None:
+        amount = Money(amount_data["paise"])
+    else:
+        amount = Money(data["amount_paise"])
     return RefundInfo(
         refund_id=RefundId(data["refund_id"]),
-        amount=Money(data["amount_paise"]),
+        amount=amount,
         method=RefundMethod(data["method"]),
         expected_by=from_utc_iso(data["expected_by"]),
     )
 
 
 def cancel_result_to_json(result: CancelResult) -> str:
-    return json.dumps({"order_id": result.order_id, "refund": _refund_info_to_json(result.refund)})
+    payload = SchemaCancelResult.model_validate(result, from_attributes=True)
+    return payload.model_dump_json()
 
 
 def cancel_result_from_json(raw: str) -> CancelResult:
-    data = json.loads(raw)
+    data = SchemaCancelResult.model_validate_json(raw)
+    refund = None
+    if data.refund is not None:
+        refund = RefundInfo(
+            refund_id=RefundId(data.refund.refund_id),
+            amount=Money(data.refund.amount.paise),
+            method=RefundMethod(data.refund.method),
+            expected_by=data.refund.expected_by,
+        )
     return CancelResult(
-        order_id=OrderId(data["order_id"]), refund=_refund_info_from_json(data["refund"])
+        order_id=OrderId(data.order_id), refund=refund
     )
 
 
 def return_result_to_json(result: ReturnResult) -> str:
-    return json.dumps(
-        {
-            "return_id": result.return_id,
-            "order_item_id": result.order_item_id,
-            "resolution": result.resolution.value,
-            "refund": _refund_info_to_json(result.refund),
-            "pickup_by": to_utc_iso(result.pickup_by),
-        }
-    )
+    payload = SchemaReturnResult.model_validate(result, from_attributes=True)
+    return payload.model_dump_json()
 
 
 def return_result_from_json(raw: str) -> ReturnResult:
-    data = json.loads(raw)
+    data = SchemaReturnResult.model_validate_json(raw)
+    refund = None
+    if data.refund is not None:
+        refund = RefundInfo(
+            refund_id=RefundId(data.refund.refund_id),
+            amount=Money(data.refund.amount.paise),
+            method=RefundMethod(data.refund.method),
+            expected_by=data.refund.expected_by,
+        )
     return ReturnResult(
-        return_id=ReturnId(data["return_id"]),
-        order_item_id=OrderItemId(data["order_item_id"]),
-        resolution=Resolution(data["resolution"]),
-        refund=_refund_info_from_json(data["refund"]),
-        pickup_by=from_utc_iso(data["pickup_by"]),
+        return_id=ReturnId(data.return_id),
+        order_item_id=OrderItemId(data.order_item_id),
+        resolution=Resolution(data.resolution),
+        refund=refund,
+        pickup_by=data.pickup_by,
     )
 
 

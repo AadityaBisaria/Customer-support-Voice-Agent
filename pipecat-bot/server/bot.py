@@ -209,9 +209,9 @@ async def run_bot(
             model=os.getenv("LLM_MODEL", "google/gemma-4-e4b"),
             system_instruction=(
                 "You are a friendly customer-support voice assistant for a demo that "
-                "answers questions from Amazon.in's public help pages about returns, "
+                "answers questions from Aryan Retail's public help pages about returns, "
                 "refunds, replacements, and deliveries. You are a demo assistant, not "
-                "Amazon itself. Your responses will be spoken aloud, so avoid emojis, "
+                "Aryan Retail itself. Your responses will be spoken aloud, so avoid emojis, "
                 "bullet points, or other formatting that can't be spoken. Keep replies "
                 "to one or two short sentences. "
                 "You speak both English and Hinglish. Always follow the current "
@@ -249,7 +249,7 @@ async def run_bot(
     # it can reach the model.
     slot_gate = SlotGateProcessor(get_flow_manager=lambda: flow_manager)
 
-    # Grounds knowledge questions in the Amazon.in help corpus, but only at
+    # Grounds knowledge questions in the Aryan Retail help corpus, but only at
     # KB-capable nodes — mid-flow turns clear stale grounding instead, so a
     # "say you don't have that information" directive never leaks into a
     # slot-collection turn. Retrieval runs speculatively on interim

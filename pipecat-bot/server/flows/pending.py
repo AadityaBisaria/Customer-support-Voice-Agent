@@ -73,11 +73,12 @@ def cancel_readback(band: Band, *, order_id: str, titles: str, refund_line: str)
 
 
 def refund_line_for(band: Band, *, amount: Money, method: str, expected: datetime) -> str:
+    spoken_method = method.replace("_", " ")
     return _banded(
         band,
-        f" Your refund of {speak_money(amount)} goes to {method}, expected by {speak_date(expected)}.",
-        f" Refund {speak_money(amount)} aapke {method} में आएगा, {speak_date(expected)} तक.",
-        f" {speak_money(amount)} का refund आपके {method} में {speak_date(expected)} तक आ जाएगा.",
+        f" Your refund of {speak_money(amount)} goes to {spoken_method}, expected by {speak_date(expected)}.",
+        f" Refund {speak_money(amount)} aapke {spoken_method} में आएगा, {speak_date(expected)} तक.",
+        f" {speak_money(amount)} का refund आपके {spoken_method} में {speak_date(expected)} तक आ जाएगा.",
     )
 
 

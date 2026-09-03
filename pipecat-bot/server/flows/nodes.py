@@ -127,7 +127,7 @@ async def make_greet_unauth(deps: SessionDeps, flow_manager) -> dict:
         "name": "greet_unauth",
         "task_messages": task_messages(
             deps,
-            "Greet the caller briefly: you are a demo support assistant for Amazon "
+            "Greet the caller briefly: you are a demo support assistant for Aryan Retail "
             "returns, refunds, replacements, and delivery questions. Answer general "
             "policy questions directly. The moment they mention THEIR order or "
             "account in any way — my order, mera order, a return, a refund, a "
@@ -480,40 +480,7 @@ async def make_select_resolution(deps: SessionDeps, flow_manager) -> dict:
 
 
 async def _after_resolution(deps: SessionDeps, flow_manager) -> dict:
-    order = await deps.store.order_with_items(OrderId(deps.wip["order_id"]))
-    if (
-        deps.wip["resolution"] == Resolution.REFUND.value
-        and order.payment_method is PaymentMethod.POD
-    ):
-        return await make_select_refund_destination(deps, flow_manager)
     return await _build_case_confirm(deps, flow_manager, destination=None)
-
-
-async def make_select_refund_destination(deps: SessionDeps, flow_manager) -> dict:
-    async def handler(args, flow_manager):
-        d = _deps(flow_manager)
-        destination = {"bank_transfer": RefundMethod.NEFT, "cheque": RefundMethod.CHEQUE}[
-            args["destination"]
-        ]
-        return None, await _build_case_confirm(d, flow_manager, destination=destination)
-
-    select = FlowsFunctionSchema(
-        name="select_refund_destination",
-        description="Record where the Pay on Delivery refund should go.",
-        properties={"destination": {"type": "string", "enum": ["bank_transfer", "cheque"]}},
-        required=["destination"],
-        handler=handler,
-    )
-    return {
-        "name": "select_refund_destination",
-        "task_messages": task_messages(
-            deps,
-            "This order was Pay on Delivery, so ask where the refund should go: a bank "
-            "transfer (about 5 working days) or a cheque (about 10 working days). Then "
-            "call select_refund_destination.",
-        ),
-        "functions": [select, _routing("go_back", "The user wants the main menu.", make_triage)],
-    }
 
 
 async def _build_cancel_confirm(deps: SessionDeps, flow_manager, order_id: OrderId) -> dict:
@@ -530,7 +497,7 @@ async def _build_cancel_confirm(deps: SessionDeps, flow_manager, order_id: Order
     details = await deps.store.items_for_order(order_id)
     titles = ", ".join(d.product.title for d in details)
     band = deps.tracker.band
-    if order.payment_method is PaymentMethod.POD:
+    if order.payment_method is PaymentMethod.CASH_ON_DELIVERY:
         refund_line = ""
     else:
         method, expected = refund_expectation(order.payment_method, deps.clock.now())

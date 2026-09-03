@@ -96,7 +96,7 @@ async def _execute(deps: SessionDeps, pending: PendingMutation) -> str:
         )
         text = f"Order {result.order_id} is cancelled.{_refund_sentence(result.refund)}"
         if result.refund is None:
-            text += " Since it was Pay on Delivery, no payment was taken."
+            text += " Since it was Cash on Delivery, no payment was taken."
         return f"Tell the user: {text} Ask if they need anything else."
 
     if pending.op == "create_return":
