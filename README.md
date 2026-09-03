@@ -1,9 +1,9 @@
 # pipecat-bot
 
 A Hinglish voice agent built with a Pipecat cascade pipeline (STT → LLM → TTS):
-an Amazon-style returns/refunds support line that **mirrors the caller's
+an Aryan Retail-style returns/refunds support line that **mirrors the caller's
 Hindi/English mix**, answers policy questions **only** from a knowledge base
-built from Amazon.in's public help pages, and — since the transactional
+built from Aryan Retail's public help pages, and — since the transactional
 milestone — **does things**: identifies the caller, reports order and refund
 status, files returns and exchanges, and cancels unshipped orders against a
 mock order store.

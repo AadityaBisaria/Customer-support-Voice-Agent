@@ -136,25 +136,15 @@ class TestReturns:
         assert result.refund.amount == Money(189900)
         assert result.pickup_by == NOW + timedelta(days=2)
 
-    async def test_pod_return_needs_destination(self, store):
-        with pytest.raises(PolicyError) as e:
-            await store.create_return(
-                order_item_id=OrderItemId(6),
-                reason=ReturnReason.NOT_NEEDED,
-                refund_destination=None,
-                idempotency_key="r2",
-            )
-        assert e.value.code == "destination_required"
-
-    async def test_pod_return_with_cheque(self, store):
+    async def test_pod_return_defaults_to_upi(self, store):
         result = await store.create_return(
             order_item_id=OrderItemId(6),
             reason=ReturnReason.NOT_NEEDED,
-            refund_destination=RefundMethod.CHEQUE,
+            refund_destination=None,
             idempotency_key="r3",
         )
-        assert result.refund.method is RefundMethod.CHEQUE
-        assert result.refund.expected_by == NOW + timedelta(days=14)  # 10 working days
+        assert result.refund.method is RefundMethod.UPI
+        assert result.refund.expected_by == NOW + timedelta(days=7)
 
     async def test_replacement_happy_path(self, store):
         result = await store.create_replacement(

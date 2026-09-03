@@ -233,16 +233,10 @@ class TestRefundExpectation:
         _, expected = refund_expectation(PaymentMethod.CARD, friday)
         assert expected == friday + timedelta(days=7)  # Fri -> next Fri
 
-    def test_pod_needs_destination(self):  # qa-036
-        with pytest.raises(PolicyError) as e:
-            refund_expectation(PaymentMethod.POD, NOW)
-        assert e.value.code == "destination_required"
-
-    def test_pod_neft_and_cheque(self):  # qa-036
-        method, expected = refund_expectation(PaymentMethod.POD, NOW, RefundMethod.NEFT)
-        assert method is RefundMethod.NEFT and expected == NOW + timedelta(days=7)
-        method, expected = refund_expectation(PaymentMethod.POD, NOW, RefundMethod.CHEQUE)
-        assert method is RefundMethod.CHEQUE and expected == NOW + timedelta(days=14)
+    def test_pod_defaults_to_upi(self):  # qa-036 simplified
+        method, expected = refund_expectation(PaymentMethod.POD, NOW)
+        assert method is RefundMethod.UPI
+        assert expected == NOW + timedelta(days=7)
 
 
 def test_return_window_values():

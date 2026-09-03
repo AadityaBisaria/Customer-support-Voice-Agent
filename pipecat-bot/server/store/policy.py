@@ -1,9 +1,8 @@
-"""Business policy: pure functions mirroring the knowledge-base facts.
+"""Business policy: pure functions mirroring retail rules and SLAs.
 
-Each rule cites the corpus entry it mirrors (rag/corpus/qa.json). These run
-with no database — the conversation layer calls them to decide what to offer,
-and the store re-checks them inside the mutation transaction (defense in
-depth: the DB never records something policy forbids).
+These run with no database — the conversation layer calls them to decide
+what to offer dynamically, and the store re-checks them inside mutation
+transactions (defense in depth).
 """
 
 from collections.abc import Sequence
@@ -11,15 +10,18 @@ from datetime import datetime, timedelta
 
 from .domain import (
     DAMAGE_CLASS_REASONS,
+    Delivery,
+    DeliveryStatus,
     Order,
     OrderStatus,
     PaymentMethod,
-    PolicyType,
+    ProductCategory,
     RefundMethod,
     Resolution,
+    ReturnPolicyType,
     ReturnReason,
     ReturnRequest,
-    ReturnStatus,
+    ReturnRequestStatus,
 )
 
 
@@ -32,82 +34,91 @@ class PolicyError(Exception):
         self.message = message
 
 
-# qa-018: even non-returnable items get help for damage-class issues, but you
-# must report within 5 days of delivery.
+# Policy return windows
 _NON_RETURNABLE_DAMAGE_WINDOW = timedelta(days=5)
 
-_WINDOWS: dict[PolicyType, timedelta] = {
-    PolicyType.RETURNABLE_10D: timedelta(days=10),
-    PolicyType.RETURNABLE_30D: timedelta(days=30),
-    PolicyType.REPLACEMENT_ONLY_7D: timedelta(days=7),
-    PolicyType.REPLACEMENT_ONLY_10D: timedelta(days=10),
+_WINDOWS: dict[ReturnPolicyType, timedelta] = {
+    ReturnPolicyType.RETURNABLE_10D: timedelta(days=10),
+    ReturnPolicyType.RETURNABLE_30D: timedelta(days=30),
+    ReturnPolicyType.REPLACEMENT_ONLY_7D: timedelta(days=7),
+    ReturnPolicyType.REPLACEMENT_ONLY_10D: timedelta(days=10),
+    ReturnPolicyType.STANDARD: timedelta(days=10),
+    ReturnPolicyType.REPLACEMENT_ONLY: timedelta(days=7),
 }
 
 
-def return_window(policy: PolicyType) -> timedelta | None:
-    """The policy's action window from delivery. None = no general window
-    (non-returnable; only the qa-018 damage window applies)."""
+def return_window(policy: ReturnPolicyType) -> timedelta | None:
+    """The policy's action window from delivery. None = non-returnable."""
     return _WINDOWS.get(policy)
 
 
+def add_working_days(start: datetime, days: int) -> datetime:
+    """Skip Saturdays and Sundays for SLA projections."""
+    current = start
+    remaining = days
+    while remaining > 0:
+        current = current + timedelta(days=1)
+        if current.weekday() < 5:  # Monday to Friday
+            remaining -= 1
+    return current
+
+
+# ----------------------------------------------------------- Order Cancellation
 def check_cancellable(order: Order) -> None:
-    """Cancellation is only possible before the order ships."""
+    """Cancellation is only allowed while the order has not shipped."""
     if order.status is OrderStatus.CANCELLED:
         raise PolicyError("already_cancelled", "This order is already cancelled.")
     if order.status is not OrderStatus.PLACED:
         raise PolicyError(
             "already_shipped",
-            "This order has already shipped, so it can't be cancelled. "
-            "Once it's delivered, a return may be possible instead.",
+            "This order has already shipped, so it cannot be cancelled. "
+            "Once delivered, you can request a return or replacement instead.",
         )
 
 
+# ---------------------------------------------------- Returns, Replacements & Exchanges
 def valid_resolutions(
     *,
-    policy: PolicyType,
+    policy: ReturnPolicyType,
+    category: ProductCategory,
     reason: ReturnReason,
     delivered_at: datetime | None,
     now: datetime,
     same_variant_in_stock: bool,
+    has_exchangeable_variants: bool,
     prior_requests: Sequence[ReturnRequest],
 ) -> frozenset[Resolution]:
-    """Which resolutions this item is entitled to, or raise the most specific
-    PolicyError when the answer is none.
-
-    Rules mirrored: qa-022 (returnable windows incl. change of mind),
-    qa-023/026 (replacement-only, no change-of-mind refund), qa-018/002/030
-    (non-returnable but damage still covered, 5-day report window),
-    qa-046 (no second replacement), qa-020/045 (replacement needs the exact
-    item in stock, else refund), qa-032 (buyer's remorse per policy type).
-    """
+    """Computes entitled resolutions or raises a speakable PolicyError."""
     if delivered_at is None:
         raise PolicyError(
-            "not_delivered", "This item hasn't been delivered yet, so it can't be returned."
+            "not_delivered", "This item has not been delivered yet, so it cannot be returned."
         )
 
+    # Active requests check
     active = [
-        r for r in prior_requests if r.status not in (ReturnStatus.COMPLETED, ReturnStatus.REJECTED)
+        r
+        for r in prior_requests
+        if r.status not in (ReturnRequestStatus.COMPLETED, ReturnRequestStatus.REJECTED)
     ]
     if active:
         raise PolicyError(
             "already_active",
-            f"There's already an open request for this item, reference {active[0].id}.",
+            f"There is already an open request for this item, reference {active[0].return_id}.",
         )
 
     damage_class = reason in DAMAGE_CLASS_REASONS
     window = return_window(policy)
 
-    if window is None:  # non-returnable
+    if window is None or policy is ReturnPolicyType.NON_RETURNABLE:
         if not damage_class:
             raise PolicyError(
                 "non_returnable",
-                "This item is non-returnable, and change-of-mind returns aren't covered for it.",
+                "This item is non-returnable, and change-of-mind requests are not accepted for it.",
             )
         if now - delivered_at > _NON_RETURNABLE_DAMAGE_WINDOW:
             raise PolicyError(
                 "window_closed",
-                "For non-returnable items, damage has to be reported within 5 days of delivery, "
-                "and that window has closed.",
+                "For non-returnable items, issues must be reported within 5 days of delivery. That window has closed.",
             )
         offered = {Resolution.REFUND, Resolution.REPLACEMENT}
     else:
@@ -119,98 +130,114 @@ def valid_resolutions(
             )
         if damage_class:
             offered = {Resolution.REFUND, Resolution.REPLACEMENT}
-        elif policy in (PolicyType.RETURNABLE_10D, PolicyType.RETURNABLE_30D):
+        elif policy in (ReturnPolicyType.RETURNABLE_10D, ReturnPolicyType.RETURNABLE_30D, ReturnPolicyType.STANDARD):
             offered = {Resolution.REFUND}
-        else:  # replacement-only policy, change-of-mind reason
+            # Allow exchange for apparel if other sizes/colors are in stock
+            if category is ProductCategory.APPAREL and has_exchangeable_variants:
+                offered.add(Resolution.EXCHANGE)
+        else:
             raise PolicyError(
                 "no_change_of_mind",
-                "This item has a replacement-only policy, so it can't be returned "
-                "just for a change of mind.",
+                "This item has a replacement-only policy and cannot be returned for a change of mind.",
             )
 
-    # qa-046: an item that was already replaced once can't be replaced again.
+    # Prior replacement limit (no second replacements)
     replaced_before = any(
-        r.resolution is Resolution.REPLACEMENT and r.status is not ReturnStatus.REJECTED
+        r.resolution_type is Resolution.REPLACEMENT and r.status is not ReturnRequestStatus.REJECTED
         for r in prior_requests
     )
     if replaced_before:
         offered.discard(Resolution.REPLACEMENT)
-    # qa-020/045: replacement requires the exact same item in stock.
+
+    # Stock constraints
     if not same_variant_in_stock:
         offered.discard(Resolution.REPLACEMENT)
 
     if not offered:
-        # Only reachable when damage-class replacement was the sole option and
-        # it got discarded — offer nothing, say why.
         if replaced_before:
             raise PolicyError(
                 "already_replaced",
-                "This item was already replaced once, and a second replacement isn't possible.",
+                "This item was already replaced once, and a second replacement is not permitted.",
             )
         raise PolicyError(
             "out_of_stock",
-            "The exact same item isn't in stock with the seller, so a replacement isn't possible.",
+            "The exact replacement item is out of stock, so a replacement cannot be offered.",
         )
+
     return frozenset(offered)
 
 
 def explain_missing_replacement(
     *, same_variant_in_stock: bool, prior_requests: Sequence[ReturnRequest]
 ) -> PolicyError:
-    """Why replacement specifically isn't on the table (qa-046, qa-020/045).
-
-    Used when `valid_resolutions` offered refund but the caller wanted a
-    replacement — both the conversation layer and the store speak with the
-    same words.
-    """
+    """Explains why replacement is unavailable when the user explicitly requests it."""
     replaced_before = any(
-        r.resolution is Resolution.REPLACEMENT and r.status is not ReturnStatus.REJECTED
+        r.resolution_type is Resolution.REPLACEMENT and r.status is not ReturnRequestStatus.REJECTED
         for r in prior_requests
     )
     if replaced_before:
         return PolicyError(
             "already_replaced",
-            "This item was already replaced once, and a second replacement isn't possible.",
+            "This item was already replaced once, and a second replacement cannot be issued.",
         )
     if not same_variant_in_stock:
         return PolicyError(
             "out_of_stock",
-            "The exact same item isn't in stock with the seller, so a replacement isn't possible.",
+            "The item is currently out of stock with the seller, so a replacement is unavailable.",
         )
-    return PolicyError("resolution_not_offered", "That option isn't available for this item.")
+    return PolicyError("resolution_not_offered", "Replacement is not available for this product.")
 
 
-def add_working_days(start: datetime, days: int) -> datetime:
-    """Skip Saturdays and Sundays. Public holidays are documented out of scope."""
-    current = start
-    remaining = days
-    while remaining > 0:
-        current = current + timedelta(days=1)
-        if current.weekday() < 5:  # Mon..Fri
-            remaining -= 1
-    return current
+# ------------------------------------------------------------ Logistics Reschedule
+def check_reschedule_allowed(delivery: Delivery, new_date: datetime, now: datetime) -> None:
+    """Enforces boundaries for customer-initiated delivery rescheduling."""
+    if delivery.status in (DeliveryStatus.DELIVERED, DeliveryStatus.RETURNED_TO_ORIGIN):
+        raise PolicyError("already_completed", "This delivery is already completed and cannot be rescheduled.")
+    if delivery.status is DeliveryStatus.OUT_FOR_DELIVERY:
+        raise PolicyError(
+            "out_for_delivery",
+            "The driver is already out for delivery today. If you are unavailable, the driver will re-attempt tomorrow.",
+        )
+    if delivery.reschedule_count >= 2:
+        raise PolicyError(
+            "max_reschedules_exceeded",
+            "This shipment has reached the limit of two reschedules.",
+        )
+    if new_date.date() <= now.date():
+        raise PolicyError("invalid_date", "The rescheduled delivery date must be at least one day in the future.")
+    if (new_date - now).days > 7:
+        raise PolicyError("date_too_far", "Deliveries cannot be postponed for more than 7 days.")
 
 
+# ------------------------------------------------------------- Dispute Eligibility
+def check_dispute_eligible(order: Order, delivery: Delivery | None, now: datetime) -> None:
+    """Verifies eligibility for an Item Not Received (INR) dispute."""
+    if order.status is not OrderStatus.DELIVERED:
+        raise PolicyError("not_delivered", "A missing delivery dispute can only be filed after an order is marked delivered.")
+    
+    delivered_time = order.delivered_at or (delivery.actual_delivery_date if delivery else None)
+    if delivered_time and (now - delivered_time).days > 3:
+        raise PolicyError(
+            "dispute_window_closed",
+            "Disputes for missing deliveries must be reported within 3 days of the delivery notification.",
+        )
+
+
+# -------------------------------------------------------- Refund Timelines & Routes
 def refund_expectation(
     payment_method: PaymentMethod,
     initiated_at: datetime,
     destination: RefundMethod | None = None,
 ) -> tuple[RefundMethod, datetime]:
-    """Refund route + expected-by, per the KB timelines (qa-034/035/036)."""
-    if payment_method is PaymentMethod.AMAZON_PAY:
-        return RefundMethod.AMAZON_PAY, initiated_at + timedelta(hours=4)
-    if payment_method is PaymentMethod.CARD:
-        return RefundMethod.CARD, add_working_days(initiated_at, 5)
-    if payment_method is PaymentMethod.UPI:
-        return RefundMethod.UPI, add_working_days(initiated_at, 5)
-    if payment_method is PaymentMethod.NETBANKING:
-        return RefundMethod.NETBANKING, add_working_days(initiated_at, 5)
-    # Pay on Delivery: the caller chooses where the money goes (qa-036).
-    if destination is RefundMethod.NEFT:
+    """Calculates refund channel and SLA date based on the payment method."""
+    if payment_method in (PaymentMethod.CARD, PaymentMethod.UPI, PaymentMethod.NETBANKING):
+        return RefundMethod.ORIGINAL_SOURCE, add_working_days(initiated_at, 5)
+
+    if payment_method is PaymentMethod.CASH_ON_DELIVERY:
+        if destination is RefundMethod.CHEQUE:
+            return RefundMethod.CHEQUE, add_working_days(initiated_at, 10)
+        if destination is RefundMethod.STORE_CREDIT:
+            return RefundMethod.STORE_CREDIT, initiated_at + timedelta(hours=2)
         return RefundMethod.NEFT, add_working_days(initiated_at, 5)
-    if destination is RefundMethod.CHEQUE:
-        return RefundMethod.CHEQUE, add_working_days(initiated_at, 10)
-    raise PolicyError(
-        "destination_required",
-        "For Pay on Delivery orders the refund needs a destination: bank transfer or cheque.",
-    )
+
+    return RefundMethod.ORIGINAL_SOURCE, add_working_days(initiated_at, 5)

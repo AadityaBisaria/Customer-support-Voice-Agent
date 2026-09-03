@@ -1,30 +1,38 @@
 """The SupportStore Protocol — the production seam.
 
-The conversation layer depends on THIS, never on sqlite.py. A real deployment
-implements the same Protocol over order-management APIs; flow code doesn't
-change. All methods are async (the SQLite implementation wraps its sync core
-in asyncio.to_thread).
+The conversation layer depends on THIS, never on concrete database adapters.
+All reads and mutations pass through this asynchronous boundary.
 
-The three mutations are never registered as LLM tools; the only caller is
-the confirm gate in flows/confirm.py, after the deterministic yes.
+Mutations are never registered directly as LLM tools; only deterministic
+confirmation gates (e.g., flows/confirm.py) execute them with idempotency keys.
 """
 
 from collections.abc import Collection
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from .domain import (
     CancelResult,
     Customer,
+    CustomerAccount,
     CustomerId,
+    Delivery,
+    DeliveryId,
+    DeliverySlotPreference,
+    DisputeId,
+    DisputeTicket,
     DomainEvent,
     ItemDetail,
     Order,
+    OrderFeedback,
     OrderId,
     OrderItemId,
     OrderStatus,
     OrderSummary,
+    PaymentCollectionMode,
     PhoneNumber,
-    RefundMethod,
+    ProductVariant,
+    RefundDestination,
     RefundView,
     ReturnReason,
     ReturnRequest,
@@ -38,6 +46,10 @@ class SupportStore(Protocol):
     # ------------------------------------------------------------- reads
     async def customer_by_phone(self, phone: PhoneNumber) -> Customer | None: ...
 
+    async def account_for_customer(
+        self, customer_id: CustomerId
+    ) -> CustomerAccount | None: ...
+
     async def orders_for_customer(
         self, customer_id: CustomerId, *, statuses: Collection[OrderStatus] | None = None
     ) -> list[OrderSummary]: ...
@@ -46,7 +58,13 @@ class SupportStore(Protocol):
 
     async def items_for_order(self, order_id: OrderId) -> list[ItemDetail]: ...
 
-    async def return_requests_for_item(self, order_item_id: OrderItemId) -> list[ReturnRequest]: ...
+    async def delivery_for_order(self, order_id: OrderId) -> Delivery | None: ...
+
+    async def variants_for_product(self, product_id: int) -> list[ProductVariant]: ...
+
+    async def return_requests_for_item(
+        self, order_item_id: OrderItemId
+    ) -> list[ReturnRequest]: ...
 
     async def refunds_for_customer(self, customer_id: CustomerId) -> list[RefundView]: ...
 
@@ -57,17 +75,58 @@ class SupportStore(Protocol):
     ) -> list[DomainEvent]: ...
 
     # -------------------------------------------- mutations (gate-only)
-    async def cancel_order(self, *, order_id: OrderId, idempotency_key: str) -> CancelResult: ...
+    async def cancel_order(
+        self, *, order_id: OrderId, idempotency_key: str
+    ) -> CancelResult: ...
 
     async def create_return(
         self,
         *,
         order_item_id: OrderItemId,
         reason: ReturnReason,
-        refund_destination: RefundMethod | None,
+        refund_destination: RefundDestination | None,
         idempotency_key: str,
     ) -> ReturnResult: ...
 
     async def create_replacement(
-        self, *, order_item_id: OrderItemId, reason: ReturnReason, idempotency_key: str
+        self,
+        *,
+        order_item_id: OrderItemId,
+        reason: ReturnReason,
+        idempotency_key: str,
     ) -> ReturnResult: ...
+
+    async def create_exchange(
+        self,
+        *,
+        order_item_id: OrderItemId,
+        new_variant_id: VariantId,
+        reason: ReturnReason,
+        idempotency_key: str,
+    ) -> ReturnResult: ...
+
+    async def reschedule_delivery(
+        self,
+        *,
+        delivery_id: DeliveryId,
+        new_date: datetime,
+        slot: DeliverySlotPreference | None,
+        instructions: str | None,
+        idempotency_key: str,
+    ) -> Delivery: ...
+
+    async def update_payment_collection_mode(
+        self,
+        *,
+        order_id: OrderId,
+        mode: PaymentCollectionMode,
+        idempotency_key: str,
+    ) -> Order: ...
+
+    async def submit_dispute_ticket(
+        self, *, ticket: DisputeTicket, idempotency_key: str
+    ) -> DisputeId: ...
+
+    async def record_order_feedback(
+        self, *, feedback: OrderFeedback, idempotency_key: str
+    ) -> None: ...
