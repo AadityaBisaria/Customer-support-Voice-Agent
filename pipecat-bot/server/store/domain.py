@@ -8,7 +8,7 @@ status changes go through declarative transition maps.
 from collections.abc import Mapping
 from enum import StrEnum
 # ------------------------------------------------------------ Canonical Models
-from server.schemas.models import (
+from schemas.models import (
     Address,
     CancelResult,
     Customer,
@@ -59,6 +59,7 @@ from server.schemas.models import (
     ReturnRequestStatus,
     ReturnResult,
     VariantId,
+    VerifiedChannel,
 )
 
 # Backward-compatibility aliases for existing pipeline imports

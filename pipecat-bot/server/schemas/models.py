@@ -152,7 +152,8 @@ class ReturnRequestStatus(StrEnum):
     COMPLETED = "completed"
     REJECTED = "rejected"
 
-
+PolicyType = ReturnPolicyType
+ReturnStatus = ReturnRequestStatus
 
 
 class RefundMethod(StrEnum):
