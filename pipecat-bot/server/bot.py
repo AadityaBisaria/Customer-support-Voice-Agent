@@ -319,6 +319,7 @@ async def run_bot(
         deps.wip.clear()
         language_tracker.reset()
         flow_manager.state.pop(flows.GATE_STATE_KEY, None)
+        flow_manager.state.pop("pending", None)
 
         # A new call also gets a clean conversation history, then the starting
         # language directive, then the flow graph takes over: verified Twilio
