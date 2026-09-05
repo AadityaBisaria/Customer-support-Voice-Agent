@@ -35,7 +35,6 @@ from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.evals.transport import EvalTransportParams
-from pipecat.flows import FlowManager
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -45,7 +44,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
-from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.google.vertex.llm import GoogleVertexLLMService
 from pipecat.services.sarvam.stt import SarvamRealtimeSTTService
 from pipecat.services.sarvam.tts import SarvamTTSService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -53,8 +52,9 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 from pydantic import BaseModel
 
-import flows
-from flows import SessionDeps, SlotGateProcessor
+from flows import SessionDeps
+from flows.command_processor import CommandProcessor
+from flows.commands import CommandBatch
 from language import (
     Band,
     LanguageBandTracker,
@@ -62,10 +62,11 @@ from language import (
     directive_for_band,
     short_hint_for_band,
 )
-from rag import QAIndex, RAGGroundingProcessor
+from rag import QAIndex
 from store.clock import IstClock
 from store.domain import PhoneNumber
 from store.sqlite import SqliteSupportStore
+from transcript import ConversationTranscript, ConversationTranscriptProcessor
 
 load_dotenv(override=True)
 
@@ -154,10 +155,15 @@ async def run_bot(
     # the production seam is the SupportStore Protocol, not this class) and
     # the shared language tracker.
     language_tracker = LanguageBandTracker()
+    transcript = ConversationTranscript(
+        Path(__file__).parent / "logs" / "transcripts",
+        getattr(runner_args, "session_id", None),
+    )
     deps = SessionDeps(
         store=SqliteSupportStore.seeded_in_memory(IstClock()),
         tracker=language_tracker,
         clock=IstClock(),
+        transcript=transcript,
     )
     caller_phone: PhoneNumber | None = None
     if caller_number:
@@ -193,25 +199,32 @@ async def run_bot(
         sample_rate=int(os.getenv("SARVAM_TTS_SAMPLE_RATE", "24000")),
         settings=SarvamTTSService.Settings(
             model=os.getenv("SARVAM_TTS_MODEL", "bulbul:v3"),
-            voice=os.getenv("SARVAM_TTS_VOICE", "aditya"),
+            voice=os.getenv("SARVAM_TTS_VOICE", "shubh"),
             language="hi-IN",
             min_buffer_size=20,
         ),
     )
 
-    # LLM service - a local model served by LM Studio, which exposes an
-    # OpenAI-compatible API, so OpenAILLMService talks to it via base_url.
-    # LM Studio ignores the key, but the OpenAI client requires a non-empty one.
-    llm = OpenAILLMService(
-        api_key=os.getenv("LLM_API_KEY", "lm-studio"),
-        base_url=os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
-        settings=OpenAILLMService.Settings(
-            model=os.getenv("LLM_MODEL", "google/gemma-4-e4b"),
+    # LLM service: Gemini through Vertex AI using a service-account credential.
+    vertex_project_id = os.getenv("VERTEX_PROJECT_ID", "gen-lang-client-0158129197")
+    vertex_credentials_path = os.getenv(
+        "VERTEX_CREDENTIALS_PATH",
+        r"C:\Users\Aaditya Bisaria\Voice_Agent\gen-lang-client-0158129197-ad61d3eddc83.json",
+    )
+    if not Path(vertex_credentials_path).is_file():
+        raise RuntimeError(
+            "VERTEX_CREDENTIALS_PATH must point to a Google service-account JSON file"
+        )
+    llm = GoogleVertexLLMService(
+        project_id=vertex_project_id,
+        credentials_path=vertex_credentials_path,
+        location=os.getenv("VERTEX_LOCATION", "asia-south1"),
+        settings=GoogleVertexLLMService.Settings(
+            model=os.getenv("VERTEX_MODEL", "gemini-2.5-flash"),
             system_instruction=(
-                "You are a friendly customer-support voice assistant for a demo that "
+                "You are a friendly customer-support voice assistant that "
                 "answers questions from Aryan Retail's public help pages about returns, "
-                "refunds, replacements, and deliveries. You are a demo assistant, not "
-                "Aryan Retail itself. Your responses will be spoken aloud, so avoid emojis, "
+                "refunds, replacements, and deliveries. Your responses will be spoken aloud, so avoid emojis, "
                 "bullet points, or other formatting that can't be spoken. Keep replies "
                 "to one or two short sentences. "
                 "You speak both English and Hinglish. Always follow the current "
@@ -230,12 +243,14 @@ async def run_bot(
             # instead of calling the matching function, and evals need the
             # same branch every run.
             temperature=0.0,
-            # gemma-4 is a reasoning model: left on, it spends its first hundred
-            # tokens thinking before a single word reaches TTS. Turning it off
-            # keeps the turn latency conversational.
-            extra={"reasoning_effort": "none"},
+            extra={'response_mime_type': 'application/json',
+                   'response_json_schema': CommandBatch.model_json_schema()},
         ),
     )
+
+    system_instruction = getattr(getattr(llm, "_settings", None), "system_instruction", None)
+    if isinstance(system_instruction, str):
+        transcript.log_turn("system", system_instruction)
 
     # Mirrors the caller's Hindi/English mix by swapping a [LANG-STYLE]
     # directive in the context whenever their language band changes. The
@@ -243,22 +258,19 @@ async def run_bot(
     # repeat the current band as a one-line hint near the generation point —
     # the instruction a small model actually follows.
     language_mirror = LanguageMirrorProcessor(tracker=language_tracker)
+    user_transcript = ConversationTranscriptProcessor(transcript=transcript, role="user")
+    assistant_transcript = ConversationTranscriptProcessor(transcript=transcript, role="assistant")
 
     # Deterministic gates in front of the LLM: while a confirm or phone-verify
     # node is active, the user's turn is classified by a dialogue Slot before
     # it can reach the model.
-    slot_gate = SlotGateProcessor(get_flow_manager=lambda: flow_manager)
+    command_processor = CommandProcessor(llm=llm, deps=deps, index=qa_index())
 
     # Grounds knowledge questions in the Aryan Retail help corpus, but only at
     # KB-capable nodes — mid-flow turns clear stale grounding instead, so a
     # "say you don't have that information" directive never leaks into a
     # slot-collection turn. Retrieval runs speculatively on interim
     # transcripts, so the finished turn pays ~0 added latency.
-    rag_grounding = RAGGroundingProcessor(
-        index=qa_index(),
-        language_hint=lambda: short_hint_for_band(language_tracker.band),
-        is_active=lambda: flows.is_rag_active(flow_manager),
-    )
 
     context = LLMContext()
     aggregator_pair = LLMContextAggregatorPair(
@@ -276,10 +288,10 @@ async def run_bot(
             transport.input(),
             stt,
             language_mirror,
-            slot_gate,
-            rag_grounding,
+            user_transcript,
             aggregator_pair.user(),
-            llm,
+            command_processor,
+            assistant_transcript,
             tts,
             transport.output(),
             aggregator_pair.assistant(),
@@ -297,13 +309,6 @@ async def run_bot(
         app_resources=deps,
     )
 
-    flow_manager = FlowManager(
-        llm=llm,
-        context_aggregator=aggregator_pair,
-        worker=worker,
-        transport=transport,
-    )
-    flow_manager.state["deps"] = deps
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
@@ -318,8 +323,9 @@ async def run_bot(
         deps.verify_attempts = 0
         deps.wip.clear()
         language_tracker.reset()
-        flow_manager.state.pop(flows.GATE_STATE_KEY, None)
-        flow_manager.state.pop("pending", None)
+        from flows.runtime import CommandRuntime
+        command_processor.runtime = CommandRuntime(deps)
+        command_processor.generation += 1
 
         # A new call also gets a clean conversation history, then the starting
         # language directive, then the flow graph takes over: verified Twilio
@@ -327,13 +333,8 @@ async def run_bot(
         # KB-capable greeting node.
         context.set_messages([])
         context.add_message({"role": "developer", "content": directive_for_band(Band.HINGLISH)})
-        initial = await flows.build_initial_node(deps, flow_manager)
-        if flow_manager.current_node is None:
-            await flow_manager.initialize(initial)
-        else:
-            # A FlowManager initializes once; later connections re-enter via a
-            # normal node transition (which also re-greets).
-            await flow_manager.set_node_from_config(initial)
+        transcript.log_turn("developer", directive_for_band(Band.HINGLISH))
+        await command_processor.greet()
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):

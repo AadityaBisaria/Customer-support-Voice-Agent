@@ -237,7 +237,7 @@ def cancel_result_from_json(raw: str) -> CancelResult:
     if data.refund is not None:
         refund = RefundInfo(
             refund_id=RefundId(data.refund.refund_id),
-            amount=Money(data.refund.amount.paise),
+            amount=Money(paise=data.refund.amount.paise),
             method=RefundMethod(data.refund.method),
             expected_by=data.refund.expected_by,
         )
@@ -274,10 +274,10 @@ def _order_from_row(row: sqlite3.Row, items: tuple[OrderItem, ...] = ()) -> Orde
         customer_id=CustomerId(row["customer_id"]),
         status=OrderStatus(row["status"]),
         items=items,
-        subtotal=Money(row["total_paise"]),
-        tax_amount=Money(0),
-        shipping_fee=Money(0),
-        total_amount=Money(row["total_paise"]),
+        subtotal=Money(paise=row["total_paise"]),
+        tax_amount=Money(paise=0),
+        shipping_fee=Money(paise=0),
+        total_amount=Money(paise=row["total_paise"]),
         payment_method=PaymentMethod(row["payment_method"]),
         placed_at=from_utc_iso(row["placed_at"]),
         delivered_at=from_utc_iso(row["delivered_at"]) if row["delivered_at"] else None,
@@ -302,8 +302,8 @@ def _item_from_row(row: sqlite3.Row) -> OrderItem:
         variant_id=VariantId(row["variant_id"]),
         title=row["title"] if "title" in row.keys() else "",
         quantity=row["quantity"],
-        unit_price=Money(row["price_paise"]),
-        total_price=Money(row["price_paise"] * row["quantity"]),
+        unit_price=Money(paise=row["price_paise"]),
+        total_price=Money(paise=row["price_paise"] * row["quantity"]),
     )
 
 
@@ -324,7 +324,7 @@ def _refund_from_row(row: sqlite3.Row) -> Refund:
         refund_id=RefundId(row["id"]),
         order_id=OrderId(row["order_id"]),
         return_id=ReturnId(row["return_request_id"]) if row["return_request_id"] else None,
-        amount=Money(row["amount_paise"]),
+        amount=Money(paise=row["amount_paise"]),
         status=RefundStatus(row["status"]),
         method=RefundMethod(row["method"]),
         initiated_at=from_utc_iso(row["initiated_at"]),
@@ -336,7 +336,8 @@ class SqliteSupportStore:
     def __init__(self, *, clock: Clock, path: str = ":memory:") -> None:
         self._clock = clock
         self._conn = connect(path)
-        self._lock = threading.Lock()
+        # Transaction helpers may call read helpers on the same connection/thread.
+        self._lock = threading.RLock()
 
     @classmethod
     def seeded_in_memory(cls, clock: Clock) -> "SqliteSupportStore":
@@ -424,7 +425,7 @@ class SqliteSupportStore:
                             from_utc_iso(row["delivered_at"]) if row["delivered_at"] else None
                         ),
                         item_titles=tuple(t["title"] for t in titles),
-                        total_amount=Money(row["total_paise"]),
+                        total_amount=Money(paise=row["total_paise"]),
                     )
                 )
         return summaries
@@ -470,8 +471,8 @@ class SqliteSupportStore:
                     variant_id=VariantId(r["variant_id"]),
                     title=r["title"],
                     quantity=r["quantity"],
-                    unit_price=Money(r["price_paise"]),
-                    total_price=Money(r["price_paise"] * r["quantity"]),
+                    unit_price=Money(paise=r["price_paise"]),
+                    total_price=Money(paise=r["price_paise"] * r["quantity"]),
                 ),
                 variant=ProductVariant(
                     variant_id=VariantId(r["v_id"]),
@@ -479,7 +480,7 @@ class SqliteSupportStore:
                     sku=f"SKU-{r['v_id']}",
                     attributes={"size": r["size"] or "", "color": r["color"] or ""},
                     stock_count=10 if r["in_stock"] else 0,
-                    price=Money(r["price_paise"]),
+                    price=Money(paise=r["price_paise"]),
                 ),
                 product=Product(
                     product_id=r["p_id"],
@@ -546,7 +547,7 @@ class SqliteSupportStore:
                 sku=f"SKU-{r['id']}",
                 attributes={"size": r["size"] or "", "color": r["color"] or ""},
                 stock_count=10 if r["in_stock"] else 0,
-                price=Money(0),
+                price=Money(paise=0),
             )
             for r in rows
         ]
@@ -658,7 +659,6 @@ class SqliteSupportStore:
                 refund_info: RefundInfo | None = None
                 if order.payment_method not in (
                     PaymentMethod.CASH_ON_DELIVERY,
-                    PaymentMethod.POD,
                 ):
                     method, expected_by = refund_expectation(order.payment_method, now)
                     refund_id = self._next_refund_id()
@@ -804,7 +804,7 @@ class SqliteSupportStore:
                     method, expected_by = refund_expectation(
                         PaymentMethod(r["payment_method"]), now, refund_method_enum
                     )
-                    amount = Money(r["price_paise"]) * r["quantity"]
+                    amount = Money(paise=r["price_paise"]) * r["quantity"]
                     refund_id = self._next_refund_id()
                     self._conn.execute(
                         "INSERT INTO refunds (id, order_id, return_request_id, origin, amount_paise,"
@@ -876,11 +876,34 @@ class SqliteSupportStore:
                     self._conn.execute("COMMIT")
                     return return_result_from_json(replay)
 
-                target_stock = self._variant_in_stock(new_variant_id)
-                if not target_stock:
+                target = self._conn.execute(
+                    'SELECT * FROM product_variants WHERE id = ?', (new_variant_id,)
+                ).fetchone()
+                current = self._conn.execute(
+                    'SELECT oi.variant_id, v.product_id, v.in_stock, p.category, '
+                    'p.return_policy_type, o.delivered_at FROM order_items oi '
+                    'JOIN product_variants v ON v.id = oi.variant_id '
+                    'JOIN products p ON p.id = v.product_id '
+                    'JOIN orders o ON o.id = oi.order_id WHERE oi.id = ?', (order_item_id,)
+                ).fetchone()
+                if not target or not target['in_stock']:
                     raise PolicyError(
                         "out_of_stock", "The requested size/color is currently out of stock."
                     )
+                if (not current or target['product_id'] != current['product_id']
+                        or new_variant_id == current['variant_id']):
+                    raise PolicyError('invalid_variant', 'That variant does not match this item.')
+                offered = valid_resolutions(
+                    policy=PolicyType(current['return_policy_type']),
+                    category=ProductCategory(current['category']), reason=reason,
+                    delivered_at=(from_utc_iso(current['delivered_at'])
+                                  if current['delivered_at'] else None), now=now,
+                    same_variant_in_stock=bool(current['in_stock']),
+                    has_exchangeable_variants=True,
+                    prior_requests=self._return_requests_for_item_locked(order_item_id),
+                )
+                if Resolution.EXCHANGE not in offered:
+                    raise PolicyError('resolution_not_offered', 'Exchange is unavailable for this item.')
 
                 return_id = self._next_return_id()
                 self._conn.execute(
@@ -941,6 +964,10 @@ class SqliteSupportStore:
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
+                replay = self._replay(idempotency_key)
+                if replay is not None:
+                    self._conn.execute('COMMIT')
+                    return Delivery.model_validate_json(replay)
                 row = self._conn.execute(
                     "SELECT * FROM deliveries WHERE id = ?", (delivery_id,)
                 ).fetchone()

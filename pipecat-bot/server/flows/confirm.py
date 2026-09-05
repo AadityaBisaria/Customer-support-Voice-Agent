@@ -57,6 +57,7 @@ async def make_confirm(deps: SessionDeps, flow_manager, pending: PendingMutation
     )
     return {
         "name": "confirm_mutation",
+        "speech": pending.readback,
         "task_messages": task_messages(
             deps,
             "Read back exactly this to the user and ask them to confirm: "
@@ -111,8 +112,8 @@ async def _on_decision(deps: SessionDeps, flow_manager, yes: bool) -> None:
         node = await make_wrap(
             deps,
             flow_manager,
-            "Apologize: something went wrong on our side and nothing was changed. "
-            "Ask them to try again in a moment.",
+            "Apologize: I couldn't verify the outcome of that request. "
+            "Please check its status before trying again.",
             name="mutation_failed",
         )
     await flow_manager.set_node_from_config(node)

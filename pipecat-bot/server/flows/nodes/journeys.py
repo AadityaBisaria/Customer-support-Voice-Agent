@@ -33,6 +33,7 @@ from ..pending import (
     speak_date,
     speak_money,
 )
+from ..speech import empty_speech
 from .access import make_triage
 from .shared import deps_for, routing, task_messages
 from .terminal import make_nothing_here, make_wrap
@@ -68,16 +69,19 @@ _REASON_SPOKEN = {
 def _order_line(index: int, order) -> str:
     titles = ", ".join(order.item_titles)
     when = speak_date(order.delivered_at) if order.delivered_at else speak_date(order.placed_at)
-    return f"{index}. {order.id}: {titles} ({'delivered' if order.delivered_at else 'placed'} {when}, {speak_money(order.total)})"
+    return f"{index}. {order.order_id}: {titles} ({'delivered' if order.delivered_at else 'placed'} {when}, {speak_money(order.total_amount)})"
 
 
 async def make_select_order(deps, flow_manager, purpose: Purpose) -> dict:
     assert deps.customer is not None
-    orders = await deps.store.orders_for_customer(deps.customer.id, statuses=_PURPOSE_FILTER[purpose])
+    orders = await deps.store.orders_for_customer(deps.customer.customer_id, statuses=_PURPOSE_FILTER[purpose])
     if not orders:
-        return await make_nothing_here(deps, flow_manager, _PURPOSE_EMPTY[purpose])
+        all_orders = await deps.store.orders_for_customer(deps.customer.customer_id)
+        if not all_orders:
+            return await make_nothing_here(deps, flow_manager, empty_speech(deps, 'orders'))
+        return await make_nothing_here(deps, flow_manager, empty_speech(deps, purpose))
     deps.wip["purpose"] = purpose
-    valid_ids = [str(o.id) for o in orders]
+    valid_ids = [str(o.order_id) for o in orders]
 
     async def handler(args, flow_manager):
         order_id = args["order_id"]
@@ -97,6 +101,9 @@ async def make_select_order(deps, flow_manager, purpose: Purpose) -> dict:
     listing = "\n".join(_order_line(i + 1, o) for i, o in enumerate(orders))
     return {
         "name": f"select_order_{purpose}",
+        "speech": f"कौन सा order? {listing}",
+        "choices": {'order_id': {str(o.order_id): ', '.join(o.item_titles) for o in orders}},
+        "latest_order_id": str(max(orders, key=lambda o: o.placed_at).order_id),
         "task_messages": task_messages(
             deps,
             f"Ask which order the user means, offering these:\n{listing}\n"
@@ -118,7 +125,7 @@ async def _after_order_selected(deps, flow_manager, purpose: Purpose, order_id: 
 
     items = await deps.store.items_for_order(order_id)
     if len(items) == 1:
-        deps.wip["order_item_id"] = int(items[0].item.id)
+        deps.wip["order_item_id"] = int(items[0].item.order_item_id)
         deps.wip["item_title"] = items[0].product.title
         return await make_select_reason(deps, flow_manager)
     return await make_select_item(deps, flow_manager, order_id)
@@ -146,19 +153,19 @@ async def make_order_status_report(deps, flow_manager, order_id: OrderId) -> dic
     return await make_wrap(
         deps,
         flow_manager,
-        f"Tell the user: order {order.id} with {titles} {line}. Ask if they need anything else.",
+        f"Tell the user: order {order.order_id} with {titles} {line}. Ask if they need anything else.",
         name="order_status_report",
     )
 
 
 async def make_refund_status_report(deps, flow_manager) -> dict:
     assert deps.customer is not None
-    views = await deps.store.refunds_for_customer(deps.customer.id)
+    views = await deps.store.refunds_for_customer(deps.customer.customer_id)
     if not views:
-        return await make_nothing_here(deps, flow_manager, "Tell the user: there are no refunds on this account.")
+        return await make_nothing_here(deps, flow_manager, empty_speech(deps, 'refunds'))
     lines = [
-        f"Refund {v.refund.id} for {', '.join(v.order_item_titles)}: {speak_money(v.refund.amount)} to {v.refund.method.value}, "
-        f"initiated {speak_date(v.refund.initiated_at)}, expected by {speak_date(v.refund.expected_by)}, status {v.refund.status.value}."
+        f"Refund {v.refund.refund_id} for {', '.join(v.order_item_titles)}: {speak_money(v.refund.amount)} to {v.refund.method.value}, "
+        f"initiated {speak_date(v.refund.initiated_at)}, expected by {speak_date(v.refund.expected_by_date)}, status {v.refund.status.value}."
         for v in views
     ]
     return await make_wrap(
@@ -171,7 +178,7 @@ async def make_refund_status_report(deps, flow_manager) -> dict:
 
 async def make_select_item(deps, flow_manager, order_id: OrderId) -> dict:
     items = await deps.store.items_for_order(order_id)
-    valid = {str(int(d.item.id)): d.product.title for d in items}
+    valid = {str(int(d.item.order_item_id)): d.product.title for d in items}
 
     async def handler(args, flow_manager):
         item_id = args["order_item_id"]
@@ -189,9 +196,11 @@ async def make_select_item(deps, flow_manager, order_id: OrderId) -> dict:
         required=["order_item_id"],
         handler=handler,
     )
-    listing = "\n".join(f"{i + 1}. {d.product.title} ({speak_money(d.item.price)})" for i, d in enumerate(items))
+    listing = "\n".join(f"{i + 1}. {d.product.title} ({speak_money(d.item.unit_price)})" for i, d in enumerate(items))
     return {
         "name": "select_item",
+        "speech": f"इस order में कौन सा item? {listing}",
+        "choices": {'order_item_id': valid},
         "task_messages": task_messages(
             deps, f"Ask which item they mean:\n{listing}\nCall select_item with the matching id."
         ),
@@ -214,6 +223,7 @@ async def make_select_reason(deps, flow_manager) -> dict:
     )
     return {
         "name": "select_reason",
+        "speech": f"{deps.wip.get('item_title', 'Item')} में क्या problem है—damage, defect, wrong item, missing parts, size issue, या अब इसकी ज़रूरत नहीं है?",
         "task_messages": task_messages(
             deps,
             f"Ask what the problem is with the {deps.wip.get('item_title', 'item')}: damaged, defective, wrong item, "
@@ -226,7 +236,7 @@ async def make_select_reason(deps, flow_manager) -> dict:
 async def make_select_resolution(deps, flow_manager) -> dict:
     item_id = OrderItemId(deps.wip["order_item_id"])
     order = await deps.store.order_with_items(OrderId(deps.wip["order_id"]))
-    detail = next(d for d in await deps.store.items_for_order(order.id) if d.item.id == item_id)
+    detail = next(d for d in await deps.store.items_for_order(order.order_id) if d.item.order_item_id == item_id)
     reason = ReturnReason(deps.wip["reason"])
     priors = await deps.store.return_requests_for_item(item_id)
 
@@ -271,6 +281,7 @@ async def make_select_resolution(deps, flow_manager) -> dict:
     )
     return {
         "name": "select_resolution",
+        "speech": f"आपके लिए ये options available हैं: {', '.join(deps.wip['offered'])}। आप क्या चाहेंगे?",
         "task_messages": task_messages(
             deps, f"Offer these available options: {', '.join(deps.wip['offered'])}. Call select_resolution with their choice."
         ),
@@ -286,7 +297,7 @@ async def _after_resolution(deps, flow_manager) -> dict:
     order = await deps.store.order_with_items(OrderId(deps.wip["order_id"]))
     if resolution is Resolution.REFUND and order.payment_method is PaymentMethod.CASH_ON_DELIVERY:
         assert deps.customer is not None
-        account = await deps.store.account_for_customer(deps.customer.id)
+        account = await deps.store.account_for_customer(deps.customer.customer_id)
         if account and account.default_refund_destination is not None:
             return await _build_case_confirm(
                 deps, flow_manager, destination=account.default_refund_destination
@@ -301,7 +312,7 @@ async def make_select_payout_destination(deps, flow_manager) -> dict:
         deps,
         flow_manager,
         "Tell the user a Cash on Delivery refund needs a verified UPI or bank account on file. "
-        "Ask them to update it through account settings before proceeding.",
+        "Please update it through account settings before proceeding.",
     )
 
 
@@ -317,7 +328,7 @@ async def make_select_exchange_variant(deps, flow_manager) -> dict:
         return await make_nothing_here(
             deps,
             flow_manager,
-            "Tell the user other sizes or colors for this item are currently out of stock. Offer a refund instead.",
+            "Tell the user other sizes or colors for this item are currently out of stock.",
         )
 
     labels = {
@@ -346,6 +357,8 @@ async def make_select_exchange_variant(deps, flow_manager) -> dict:
     choices = ", ".join(f"{label} (Option: {variant_id})" for variant_id, label in labels.items())
     return {
         "name": "select_exchange_variant",
+        "speech": f"कौन सा size या color चाहिए? {choices}",
+        "choices": {'variant_id': labels},
         "task_messages": task_messages(
             deps,
             f"Ask which in-stock size or color they prefer: {choices}. Call select_variant with their choice.",
@@ -387,6 +400,8 @@ async def make_select_reschedule_date(deps, flow_manager, order_id: OrderId) -> 
     choices = ", ".join(f"{date_str} (in {day} day{'s' if day != '1' else ''})" for day, date_str in days_map.items())
     return {
         "name": "select_reschedule_date",
+        "speech": f"इन dates में से कौन सी ठीक रहेगी? {choices}। Morning, afternoon या evening?",
+        "choices": {'days_ahead': days_map},
         "task_messages": task_messages(
             deps,
             f"Offer these dates for package delivery: {choices}. Ask if they prefer morning, afternoon, or evening. "
@@ -420,6 +435,8 @@ async def make_select_dispute_reason(deps, flow_manager, order_id: OrderId) -> d
     )
     return {
         "name": "select_dispute_reason",
+        "speech": 'Package मिला नहीं, box खाली था, या गलत address पर deliver हुआ?',
+        "choices": {'dispute_type': reasons},
         "task_messages": task_messages(
             deps,
             "Ask the user what happened: did the package not arrive, was the box empty, or was it left at the wrong location? "
@@ -444,7 +461,7 @@ async def _build_cancel_confirm(deps, flow_manager, order_id: OrderId) -> dict:
         if order.payment_method is PaymentMethod.CASH_ON_DELIVERY
         else refund_line_for(
             deps.tracker.band,
-            amount=order.total,
+            amount=order.total_amount,
             method=refund_expectation(order.payment_method, deps.clock.now())[0].value,
             expected=refund_expectation(order.payment_method, deps.clock.now())[1],
         )
@@ -461,8 +478,8 @@ async def _build_exchange_confirm(deps, flow_manager) -> dict:
     order = await deps.store.order_with_items(OrderId(deps.wip["order_id"]))
     detail = next(
         item
-        for item in await deps.store.items_for_order(order.id)
-        if int(item.item.id) == deps.wip["order_item_id"]
+        for item in await deps.store.items_for_order(order.order_id)
+        if int(item.item.order_item_id) == deps.wip["order_item_id"]
     )
     reason = ReturnReason(deps.wip["reason"])
     pending = PendingMutation(
@@ -505,7 +522,7 @@ async def _build_dispute_confirm(deps, flow_manager, order_id: OrderId, delivery
         args={
             "order_id": str(order_id),
             "delivery_id": int(delivery.delivery_id) if delivery else None,
-            "customer_id": int(deps.customer.id),
+            "customer_id": int(deps.customer.customer_id),
             "dispute_type": dtype.value,
         },
         readback=dispute_readback(deps.tracker.band, order_id=str(order_id), dispute_type=dtype.value),
@@ -517,7 +534,7 @@ async def _build_case_confirm(
     deps, flow_manager, *, destination: RefundDestination | None
 ) -> dict:
     order = await deps.store.order_with_items(OrderId(deps.wip["order_id"]))
-    detail = next(d for d in await deps.store.items_for_order(order.id) if int(d.item.id) == deps.wip["order_item_id"])
+    detail = next(d for d in await deps.store.items_for_order(order.order_id) if int(d.item.order_item_id) == deps.wip["order_item_id"])
     reason, band, title = ReturnReason(deps.wip["reason"]), deps.tracker.band, detail.product.title
 
     if deps.wip["resolution"] == Resolution.REPLACEMENT.value:
@@ -549,7 +566,7 @@ async def _build_case_confirm(
                 reason=_REASON_SPOKEN[reason],
                 refund_line=refund_line_for(
                     band,
-                    amount=detail.item.price * detail.item.quantity,
+                    amount=detail.item.unit_price * detail.item.quantity,
                     method=method.value,
                     expected=expected,
                 ),
