@@ -38,7 +38,14 @@ def speak_money(amount: Money) -> str:
     return amount.speak()
 
 
-MutationOp = Literal["cancel_order", "create_return", "create_replacement"]
+MutationOp = Literal[
+    "cancel_order",
+    "create_return",
+    "create_replacement",
+    "create_exchange",
+    "reschedule_delivery",
+    "submit_dispute_ticket",
+]
 
 
 @dataclass(frozen=True)
@@ -97,4 +104,34 @@ def replacement_readback(band: Band, *, title: str, reason: str) -> str:
         f"Arranging a free replacement for the {title}, reason {reason}. Should I go ahead?",
         f"{title} का free replacement arrange कर दूं, reason {reason}? हां या नहीं बोलिए.",
         f"{title} का मुफ़्त replacement arrange कर दूं, कारण {reason}? हां या नहीं बोलिए.",
+    )
+
+
+def exchange_readback(band: Band, *, title: str, variant: str, reason: str) -> str:
+    """A deterministic readback for a size/color exchange."""
+    return _banded(
+        band,
+        f"Exchanging the {title} for {variant}, reason {reason}. Should I go ahead?",
+        f"{title} ko {variant} se exchange kar rahe hain, reason {reason}. Kya main aage badhun?",
+        f"{title} ko {variant} se exchange kiya ja raha hai, kaaran {reason}. Kya main aage badhun?",
+    )
+
+
+def reschedule_readback(band: Band, *, target_date: datetime, slot: str | None) -> str:
+    time_window = f" in the {slot}" if slot else ""
+    return _banded(
+        band,
+        f"Rescheduling delivery to {speak_date(target_date)}{time_window}. Should I go ahead?",
+        f"Delivery ko {speak_date(target_date)}{time_window} reschedule kar rahe hain. Kya main aage badhun?",
+        f"Delivery ko {speak_date(target_date)}{time_window} ke liye reschedule kiya ja raha hai. Kya main aage badhun?",
+    )
+
+
+def dispute_readback(band: Band, *, order_id: str, dispute_type: str) -> str:
+    spoken_type = dispute_type.replace("_", " ")
+    return _banded(
+        band,
+        f"Opening a {spoken_type} delivery investigation for order {order_id}. Should I submit it?",
+        f"Order {order_id} ke liye {spoken_type} delivery investigation khol rahe hain. Kya main submit karun?",
+        f"Order {order_id} ke liye {spoken_type} delivery jaanch kholi ja rahi hai. Kya main submit karun?",
     )

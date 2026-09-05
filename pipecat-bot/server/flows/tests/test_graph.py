@@ -69,10 +69,10 @@ class TestInvariants:
             assert "context_strategy" not in node, node["name"]
 
     async def test_menus_stay_small(self, deps, fm, priya):
-        # <=4 for collect/select nodes; wrap/report nodes carry the 4 routing
-        # entry points + end_call (5) so any follow-up intent is one hop away.
+        # Legacy routing menus contain six domain routes plus a fallback/end.
+        # The command runtime exposes a single validated command schema instead.
         for node in await all_reachable_nodes(deps, fm):
-            assert len(node.get("functions", [])) <= 5, node["name"]
+            assert len(node.get("functions", [])) <= 7, node["name"]
 
     async def test_gate_nodes_are_toolless(self, deps, fm, priya):
         verify = await make_verify_phone(deps, fm)
@@ -117,7 +117,7 @@ class TestSelectOrder:
         assert schema.properties["order_id"]["enum"] == ["AMZ-1004"]  # only placed
 
     async def test_no_orders_goes_to_nothing_here(self, deps, fm):
-        deps.customer = await deps.store.customer_by_phone(PhoneNumber("9111111111"))  # Vikram
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9111111111"))  # Vikram
         node = await make_select_order(deps, fm, "status")
         assert node["name"] == "nothing_here"
 
@@ -140,20 +140,18 @@ class TestReturnPath:
 
     async def test_resolution_enum_is_policy_restricted(self, deps, fm, priya):
         # AMZ-3003 lamp: damage-class but variant out of stock -> refund only.
-        deps.customer = await deps.store.customer_by_phone(PhoneNumber("9000000001"))
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9000000001"))
         deps.wip.update(
             {"order_id": "AMZ-3003", "order_item_id": 11, "item_title": "lamp", "reason": "damaged"}
         )
         node = await make_select_resolution(deps, fm)
         schema = next(s for s in node["functions"] if s.name == "select_resolution")
         assert schema.properties["resolution"]["enum"] == ["refund"]
-        assert (
-            "replacement isn't possible" in node["task_messages"][0]["content"].lower()
-            or "isn't in stock" in node["task_messages"][0]["content"]
-        )
+        assert 'refund' in node['speech']
+        assert 'replacement' not in node['speech']
 
     async def test_out_of_window_goes_to_nothing_here(self, deps, fm):
-        deps.customer = await deps.store.customer_by_phone(PhoneNumber("9000000001"))
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9000000001"))
         deps.wip.update(
             {
                 "order_id": "AMZ-3001",
@@ -166,8 +164,8 @@ class TestReturnPath:
         assert node["name"] == "nothing_here"
         assert "closed" in node["task_messages"][0]["content"]
 
-    async def test_pod_refund_asks_destination(self, deps, fm):
-        deps.customer = await deps.store.customer_by_phone(PhoneNumber("9123456789"))
+    async def test_cod_refund_uses_verified_saved_destination(self, deps, fm):
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9123456789"))
         deps.wip.update(
             {
                 "order_id": "AMZ-2001",
@@ -178,7 +176,7 @@ class TestReturnPath:
             }
         )
         node = await _after_resolution(deps, fm)
-        assert node["name"] == "select_refund_destination"
+        assert node["name"] == "confirm_mutation"
 
     async def test_prepaid_refund_goes_straight_to_confirm(self, deps, fm, priya):
         deps.wip.update(
@@ -196,7 +194,7 @@ class TestReturnPath:
 
 class TestCancelPath:
     async def test_shipped_order_is_refused_in_code(self, deps, fm):
-        deps.customer = await deps.store.customer_by_phone(PhoneNumber("9123456789"))
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9123456789"))
         node = await _after_order_selected(deps, fm, "cancel", OrderId("AMZ-2002"))
         assert node["name"] == "nothing_here"
         assert "shipped" in node["task_messages"][0]["content"]
@@ -214,7 +212,7 @@ class TestVerifyPhone:
         gate = fm.state[GATE_STATE_KEY]
         await gate.on_fit("9876543210")
         assert fm.current_node == "triage"
-        assert deps.customer is not None and deps.customer.name == "Priya Sharma"
+        assert deps.customer is not None and deps.customer.first_name == "Priya"
 
     async def test_two_wrong_numbers_reach_kb_only(self, deps, fm):
         await make_verify_phone(deps, fm)
@@ -226,7 +224,7 @@ class TestVerifyPhone:
 
 class TestRefundStatus:
     async def test_report_renders_seeded_refund(self, deps, fm):
-        deps.customer = await deps.store.customer_by_phone(PhoneNumber("9000000001"))
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9000000001"))
         node = await make_refund_status_report(deps, fm)
         content = node["task_messages"][0]["content"]
         assert "REF-2001" in content and "1799 rupees" in content

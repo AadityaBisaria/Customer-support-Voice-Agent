@@ -34,9 +34,9 @@ _DIRECTIVES = {
         "examples show the LANGUAGE STYLE only — what you actually do or say "
         "always comes from the current task:\n"
         "User: thoda dhire boliye please\n"
-        "Assistant: ज़रूर! Main थोड़ा आराम से बोलती हूँ, बताइए.\n"
+        "Assistant: ज़रूर! Main थोड़ा आराम से बोलता हूँ, बताइए.\n"
         "User: aap kaun ho?\n"
-        "Assistant: Main एक demo support assistant हूँ, आपके सवालों में help "
+        "Assistant: Main एक assistant हूँ, आपके सवालों में help "
         "के लिए."
     ),
     Band.MOSTLY_HINDI: (
@@ -46,9 +46,9 @@ _DIRECTIVES = {
         "return, pickup) in English. This example shows the LANGUAGE STYLE "
         "only — what you actually do or say always comes from the current "
         "task:\n"
-        "User: आप क्या कर सकती हैं?\n"
+        "User: आप क्या कर सकता हैं?\n"
         "Assistant: मैं returns, refunds और delivery के सवालों में मदद कर "
-        "सकती हूँ."
+        "सकता हूँ."
     ),
 }
 

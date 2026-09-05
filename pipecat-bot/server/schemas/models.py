@@ -152,7 +152,8 @@ class ReturnRequestStatus(StrEnum):
     COMPLETED = "completed"
     REJECTED = "rejected"
 
-
+PolicyType = ReturnPolicyType
+ReturnStatus = ReturnRequestStatus
 
 
 class RefundMethod(StrEnum):
@@ -180,12 +181,18 @@ class CustomerAccountStatus(StrEnum):
 
 
 class VerifiedChannel(StrEnum):
+    PHONE = "phone"
+    EMAIL = "email"
     CALLER_ID = "caller_id"
     MANUAL_OTP = "manual_otp"
     UNVERIFIED = "unverified"
 
 
 class ProductCategory(StrEnum):
+    FOOTWEAR = "footwear"
+    ACCESSORIES = "accessories"
+    APPLIANCES = "appliances"
+    HOME = "home"
     HYGIENE = "hygiene"
     ELECTRONICS = "electronics"
     APPAREL = "apparel"

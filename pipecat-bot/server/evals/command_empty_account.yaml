@@ -1,0 +1,17 @@
+name: command_empty_account
+turns:
+  - expect:
+      - event: response
+        text_contains: "assistant"
+  - user: "Mere orders kya kya hain?"
+    expect:
+      - event: response
+        text_contains: "registered mobile"
+  - user: "9111111111"
+    expect:
+      - event: response
+        text_contains: "कोई orders नहीं"
+  - user: "Mujhe apna order cancel karna hai"
+    expect:
+      - event: response
+        text_contains: "कोई orders नहीं"

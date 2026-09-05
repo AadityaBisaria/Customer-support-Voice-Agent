@@ -53,7 +53,7 @@ class TestConfirmDecision:
         gate = await arm_cancel_confirm(deps, fm)
         await gate.on_fit(True)
         await gate.on_fit(True)  # same PendingMutation, same idempotency key
-        refunds = await deps.store.refunds_for_customer(priya.id)
+        refunds = await deps.store.refunds_for_customer(priya.customer_id)
         assert len([v for v in refunds if v.refund.order_id == "AMZ-1004"]) == 1
 
     async def test_raced_state_change_lands_on_failed(self, deps, fm, priya):

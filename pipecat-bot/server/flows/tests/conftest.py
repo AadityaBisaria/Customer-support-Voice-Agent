@@ -46,7 +46,7 @@ def fm(deps: SessionDeps) -> FakeFlowManager:
 
 @pytest.fixture()
 async def priya(deps: SessionDeps):
-    customer = await deps.store.customer_by_phone(PhoneNumber("9876543210"))
+    customer = await deps.store.customer_by_phone(PhoneNumber.parse("9876543210"))
     deps.customer = customer
     return customer
 

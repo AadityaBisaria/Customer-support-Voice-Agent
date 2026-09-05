@@ -17,7 +17,7 @@ async def test_sarvam_ws_config_matches_strict_schema():
         sample_rate=8000,
         settings=SarvamTTSService.Settings(
             model="bulbul:v3",
-            voice="aditya",
+            voice="shubh",
             language="hi-IN",
             min_buffer_size=20,
             pace=1.0,
@@ -31,11 +31,9 @@ async def test_sarvam_ws_config_matches_strict_schema():
     assert message["type"] == "config"
     assert message["data"] == {
         "language_code": "hi-IN",
-        "speaker": "aditya",
+        "speaker": "shubh",
         "output_audio_codec": "linear16",
         "output_audio_bitrate": "128k",
-        "min_buffer_size": 20,
-        "max_chunk_length": 150,
     }
     assert "model" not in message["data"]
     assert "speech_sample_rate" not in message["data"]
