@@ -18,7 +18,7 @@ from pipecat.frames.frames import (
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from .commands import COMPILER_PROMPT, CommandBatch
+from .commands import COMPILER_PROMPT, CompilerBatch
 from .runtime import CLARIFICATION, CommandRuntime
 
 
@@ -30,11 +30,24 @@ class CommandProcessor(FrameProcessor):
         self.index = index
         self.generation = 0
         self.lock = asyncio.Lock()
+        self._turn_started: dict[int, float] = {}
 
     async def speak(self, text, generation):
         if generation != self.generation or not text:
             return
+        started = self._turn_started.get(generation)
+        if started is not None:
+            self.runtime.event(
+                'text_response_started', turn_id=generation,
+                elapsed_ms=round((monotonic() - started) * 1000),
+            )
+            # A turn may have a bridge followed by a fact readback. Only its
+            # first response frame measures caller-perceived text latency.
+            self._turn_started.pop(generation, None)
         self.runtime.last_speech = text
+        # This is terminal, code-rendered speech for the current turn.  Do not
+        # push an LLMContextFrame here: doing so would schedule a second model
+        # completion after a deterministic fact readback or refusal.
         await self.push_frame(LLMFullResponseStartFrame())
         await self.push_frame(LLMTextFrame(text))
         await self.push_frame(LLMFullResponseEndFrame())
@@ -44,8 +57,28 @@ class CommandProcessor(FrameProcessor):
                          self.generation)
 
     def retrieve(self, text):
-        return {entry.id: entry.answer for entry, score in
-                self.index.search(self.index.embed_query(text), top_k=3) if score >= 0.89}
+        """Return one grounded policy source only when retrieval is decisive.
+
+        The former 0.89 cut-off was calibrated as though query and corpus
+        wording were identical.  It dropped ordinary Hinglish policy queries
+        entirely.  A lower floor is safe only alongside a winner margin: the
+        caller gets no source for an ambiguous lookup, and the model can only
+        cite the single source that survived this gate.
+        """
+        if self.index is None:
+            return {}
+        results = self.index.search(self.index.embed_query(text), top_k=3)
+        if not results:
+            return {}
+        winner, winner_score = results[0]
+        runner_up_score = results[1][1] if len(results) > 1 else None
+        floor = 0.60
+        margin = 0.10
+        if winner_score < floor:
+            return {}
+        if runner_up_score is not None and winner_score - runner_up_score < margin:
+            return {}
+        return {winner.id: winner.answer}
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -65,38 +98,60 @@ class CommandProcessor(FrameProcessor):
 
     async def handle(self, text, history, generation):
         started = monotonic()
+        self._turn_started[generation] = started
         calls = 0
         async with self.lock:
             if generation != self.generation:
                 return
             try:
+                shortcut_started = monotonic()
                 speech = await self.runtime.shortcut(text)
+                self.runtime.event(
+                    'deterministic_stage', turn_id=generation,
+                    elapsed_ms=round((monotonic() - shortcut_started) * 1000),
+                    resolved=speech is not None,
+                )
                 if speech is None:
+                    retrieval_started = monotonic()
                     sources = await asyncio.to_thread(self.retrieve, text)
+                    self.runtime.event(
+                        'retrieval_stage', turn_id=generation,
+                        elapsed_ms=round((monotonic() - retrieval_started) * 1000),
+                        sources=len(sources),
+                    )
                     if generation != self.generation:
                         return
                     prompt = {'state': self.runtime.snapshot(), 'recent_turns': history,
                               'policy_sources': sources, 'utterance': text}
                     calls = 1
+                    compiler_started = monotonic()
                     response = await asyncio.wait_for(self.llm.run_inference(
                         LLMContext(messages=[{'role': 'user', 'content': json.dumps(
                             prompt, ensure_ascii=False, default=str)}]),
                         system_instruction=COMPILER_PROMPT,
                         max_tokens=1500), timeout=15)
+                    self.runtime.event(
+                        'compiler_stage', turn_id=generation,
+                        elapsed_ms=round((monotonic() - compiler_started) * 1000),
+                    )
                     if generation != self.generation:
                         return
-                    batch = CommandBatch.model_validate_json(response or '')
+                    batch = CompilerBatch.model_validate_json(response or '')
                     # Acknowledgements are allowed only after atomic command validation.
                     from copy import deepcopy
 
-                    from .commands import SetSlot, StartFlow
-                    preview = deepcopy(self.runtime.stack)
-                    preview.apply(batch)
+                    from .commands import ResolveIntent
+                    # RESOLVE_INTENT is intentionally not a stack mutation:
+                    # runtime resolves its raw phrase against the live store
+                    # before it creates any internal frame.
+                    if not any(isinstance(command, ResolveIntent) for command in batch.commands):
+                        preview = deepcopy(self.runtime.stack)
+                        preview.apply(batch)
                     bridge = batch.bridge_text
                     allowed_bridges = {'जी, मैं देख रहा हूँ।', 'ज़रूर, मैं check कर रहा हूँ।',
                                        "Sure, I'll check that for you."}
                     lookup = (self.runtime.deps.customer is not None and
-                              any(isinstance(c, (StartFlow, SetSlot)) for c in batch.commands))
+                              any(isinstance(c, ResolveIntent) for c in batch.commands))
                     operation = self.create_task(self.runtime.apply(batch, sources=sources))
                     if lookup and bridge in allowed_bridges:
                         ready, _ = await asyncio.wait({operation}, timeout=0.12)
@@ -114,6 +169,7 @@ class CommandProcessor(FrameProcessor):
                 await self.speak('अभी जानकारी check नहीं हो पाई। कृपया थोड़ी देर बाद फिर कोशिश कीजिए।',
                                  generation)
             finally:
+                self._turn_started.pop(generation, None)
                 self.runtime.event('turn_completed', turn_id=generation, llm_calls=calls,
                                    elapsed_ms=round((monotonic() - started) * 1000),
                                    stale=generation != self.generation)

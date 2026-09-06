@@ -203,7 +203,17 @@
     {
       "id": "qa-025",
       "question": "Can I exchange an item for a different size or color?",
-      "paraphrases": ["size ya color exchange kar sakte hain kya", "साइज़ या कलर एक्सचेंज कर सकते हैं क्या"],
+      "paraphrases": [
+        "size ya color exchange kar sakte hain kya",
+        "साइज़ या कलर एक्सचेंज कर सकते हैं क्या",
+        "exchange policy kya hai",
+        "aapki exchange policy kya hai",
+        "आपकी exchange policy क्या है",
+        "exchange kaise karein",
+        "size badalna hai",
+        "size बदलना है",
+        "exchange rule"
+      ],
       "answer": "Items with the 10 Day Free Returns and Exchange policy can be exchanged for a different size or color within 10 days, based on availability, or returned for a full refund.",
       "tags": ["returns", "exchange"],
       "source": "returns_policy"

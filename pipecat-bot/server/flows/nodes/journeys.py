@@ -33,7 +33,7 @@ from ..pending import (
     speak_date,
     speak_money,
 )
-from ..speech import empty_speech
+from ..speech import empty_speech, policy_refusal
 from .access import make_triage
 from .shared import deps_for, routing, task_messages
 from .terminal import make_nothing_here, make_wrap
@@ -70,6 +70,33 @@ def _order_line(index: int, order) -> str:
     titles = ", ".join(order.item_titles)
     when = speak_date(order.delivered_at) if order.delivered_at else speak_date(order.placed_at)
     return f"{index}. {order.order_id}: {titles} ({'delivered' if order.delivered_at else 'placed'} {when}, {speak_money(order.total_amount)})"
+
+
+async def make_order_summary(deps, flow_manager) -> dict:
+    """Natural, fact-only overview; IDs stay available as an input shortcut."""
+    assert deps.customer is not None
+    orders = await deps.store.orders_for_customer(deps.customer.customer_id)
+    if not orders:
+        return await make_nothing_here(deps, flow_manager, empty_speech(deps, 'orders'))
+    grouped: dict[OrderStatus, list[str]] = {}
+    for order in orders:
+        grouped.setdefault(order.status, []).extend(order.item_titles)
+    fragments = []
+    for status, titles in grouped.items():
+        joined = ', '.join(titles)
+        if status is OrderStatus.PLACED:
+            fragments.append(f'{joined} अभी placed है')
+        elif status is OrderStatus.DELIVERED:
+            fragments.append(f'{joined} delivered है')
+        elif status in {OrderStatus.SHIPPED, OrderStatus.OUT_FOR_DELIVERY}:
+            fragments.append(f'{joined} रास्ते में है')
+        elif status is OrderStatus.CANCELLED:
+            fragments.append(f'{joined} cancelled है')
+        else:
+            fragments.append(f'{joined} का status {status.value} है')
+    count = len(orders)
+    message = f'आपके {count} orders हैं—' + ' और '.join(fragments) + '। किस order में help चाहिए?'
+    return await make_wrap(deps, flow_manager, message, name='order_summary_report')
 
 
 async def make_select_order(deps, flow_manager, purpose: Purpose) -> dict:
@@ -258,7 +285,7 @@ async def make_select_resolution(deps, flow_manager) -> dict:
             prior_requests=priors,
         )
     except PolicyError as e:
-        return await make_nothing_here(deps, flow_manager, f"Tell the user this isn't possible: {e.message}")
+        return await make_nothing_here(deps, flow_manager, policy_refusal(e.code, e.message))
 
     deps.wip["offered"] = sorted(r.value for r in offered)
     deps.wip["product_id"] = detail.product.product_id
@@ -328,7 +355,7 @@ async def make_select_exchange_variant(deps, flow_manager) -> dict:
         return await make_nothing_here(
             deps,
             flow_manager,
-            "Tell the user other sizes or colors for this item are currently out of stock.",
+            policy_refusal('out_of_stock', 'Other sizes or colors for this item are currently out of stock.'),
         )
 
     labels = {
@@ -453,7 +480,7 @@ async def _build_cancel_confirm(deps, flow_manager, order_id: OrderId) -> dict:
         from store.policy import check_cancellable
         check_cancellable(order)
     except PolicyError as e:
-        return await make_nothing_here(deps, flow_manager, f"Tell the user this isn't possible: {e.message}")
+        return await make_nothing_here(deps, flow_manager, policy_refusal(e.code, e.message))
 
     titles = ", ".join(d.product.title for d in await deps.store.items_for_order(order_id))
     refund_line = (

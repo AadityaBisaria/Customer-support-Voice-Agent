@@ -12,6 +12,10 @@ ALLOWED = {
     'reschedule_delivery': {'order_ref', 'days_ahead', 'slot'},
     'refund_status': set(), 'missing_delivery': {'order_ref', 'dispute_type'},
 }
+_READ_ONLY = frozenset({'order_status', 'refund_status'})
+_TRANSACTIONAL = frozenset({
+    'cancel_order', 'return_order', 'exchange_item', 'reschedule_delivery', 'missing_delivery',
+})
 DEPENDENTS = {
     'order_ref': {'order_id', 'order_item_id', 'item_title', 'item_ref', 'reason',
                   'offered', 'resolution', 'product_id', 'variant_id', 'new_variant_id',
@@ -30,12 +34,14 @@ class FlowFrame:
     slots: dict = field(default_factory=dict)
     node: dict | None = None
     dirty: bool = True
+    explicit_sequence: bool = False
 
 
 @dataclass
 class FlowStack:
     frames: list[FlowFrame] = field(default_factory=list)
     queue: list[FlowFrame] = field(default_factory=list)
+    superseded: list[FlowFrame] = field(default_factory=list)
 
     @property
     def active(self):
@@ -45,8 +51,18 @@ class FlowStack:
         return [{'request_id': f.request_id, 'flow_id': f.flow_id,
                  'step': (f.node or {}).get('name', 'entry'), 'slots': f.slots,
                  'status': 'active' if f is self.active else
-                 ('queued' if f in self.queue else 'suspended')}
+                 ('queued' if f in self.queue else 'suspended'),
+                 'explicit_sequence': f.explicit_sequence}
                 for f in self.frames + self.queue]
+
+    @staticmethod
+    def _is_uncommitted(frame: FlowFrame) -> bool:
+        name = (frame.node or {}).get('name', '')
+        return name.startswith('select_') or name == 'confirm_mutation'
+
+    def discard_stale_queue(self) -> None:
+        """Keep only work the caller explicitly asked to do sequentially."""
+        self.queue = [frame for frame in self.queue if frame.explicit_sequence]
 
     def apply(self, batch: CommandBatch):
         # Validate against a copy; no partial state writes if any command fails.
@@ -58,10 +74,22 @@ class FlowStack:
                     raise ValueError('Duplicate request_id')
                 if len(all_frames) >= 8:
                     raise ValueError('Too many outstanding requests')
-                frame = FlowFrame(command.request_id, command.flow_id)
+                frame = FlowFrame(
+                    command.request_id, command.flow_id,
+                    explicit_sequence=command.mode == 'sequential',
+                )
                 if command.mode == 'interrupt' and command.flow_id not in {'order_status', 'refund_status'}:
                     raise ValueError('Only read-only flows can interrupt')
-                if candidate.active and (command.mode == 'queue' or
+                # Never queue a new action behind an unfinished selection prompt.
+                # It is an intent correction unless the caller explicitly said
+                # "first ... then ..." (which is recorded on queued frames).
+                active = candidate.active
+                if (active and self._is_uncommitted(active) and
+                        command.flow_id in _TRANSACTIONAL):
+                    candidate.superseded.append(candidate.frames.pop())
+                    candidate.discard_stale_queue()
+                    candidate.frames.append(frame)
+                elif candidate.active and (command.mode == 'queue' or
                                          any(f.flow_id == 'verify_phone' for f in candidate.frames)):
                     candidate.queue.append(frame)
                 else:
@@ -87,7 +115,8 @@ class FlowStack:
         if not self.frames and self.queue:
             self.frames.append(self.queue.pop(0))
 
-    def complete(self):
+    def complete(self, *, promote: bool = True):
         if self.frames:
             self.frames.pop()
-        self.promote()
+        if promote:
+            self.promote()

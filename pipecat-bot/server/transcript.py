@@ -60,7 +60,9 @@ class ConversationTranscript:
     def _write(self, payload: dict) -> None:
         payload["timestamp"] = datetime.now(_IST).isoformat()
         with self.path.open("a", encoding="utf-8") as transcript:
-            transcript.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            # State events can include dates and enums. Logging must never
+            # interrupt a call merely because an observability value is rich.
+            transcript.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
 
 class ConversationTranscriptProcessor(FrameProcessor):
