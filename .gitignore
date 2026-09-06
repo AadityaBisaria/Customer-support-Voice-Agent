@@ -42,6 +42,7 @@ coverage.xml
 
 # Django stuff:
 *.log
+pipecat-bot/server/logs/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -69,6 +70,8 @@ ipython_config.py
 
 # Environment variables / virtual environments
 .env
+# Google Cloud service-account credential (never commit)
+gen-lang-client-0158129197-ad61d3eddc83.json
 .venv/
 venv/
 env/
@@ -86,3 +89,4 @@ venv.bak/
 # OS files
 .DS_Store
 Thumbs.db
+.aider*

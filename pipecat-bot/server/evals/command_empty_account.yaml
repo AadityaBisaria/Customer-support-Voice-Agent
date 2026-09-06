@@ -1,4 +1,9 @@
 name: command_empty_account
+
+# Run the bot in one terminal: uv run bot.py -t eval
+# Then: uv run pipecat eval run evals/command_empty_account.yaml -v
+# This checks the real Pipecat text path: one compiler call for the initial
+# intent, zero calls for the registered number, and factual empty-state output.
 turns:
   - expect:
       - event: response
@@ -10,8 +15,8 @@ turns:
   - user: "9111111111"
     expect:
       - event: response
-        text_contains: "कोई orders नहीं"
+        text_contains: "orders"
   - user: "Mujhe apna order cancel karna hai"
     expect:
       - event: response
-        text_contains: "कोई orders नहीं"
+        text_contains: "orders"

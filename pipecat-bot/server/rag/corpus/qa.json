@@ -9,6 +9,20 @@
   },
   "entries": [
     {
+      "id": "qa-000",
+      "question": "What is the general return policy?",
+      "paraphrases": [
+        "what is your return policy",
+        "what is the return policy",
+        "return policy kya hai",
+        "aapki return policy kya hai",
+        "आपकी return policy क्या है"
+      ],
+      "answer": "Return eligibility, the available resolution, and the return window depend on the policy shown for the specific item on its product page. Returnable items can be returned within their listed window; replacement-only items are handled under their replacement policy. I can check a particular order's options after it is delivered.",
+      "tags": ["returns", "policy", "overview"],
+      "source": "returns_policy"
+    },
+    {
       "id": "qa-001",
       "question": "What items can I return?",
       "paraphrases": ["kaunse items return kar sakte hain", "कौन से सामान वापस कर सकते हैं"],
@@ -203,7 +217,17 @@
     {
       "id": "qa-025",
       "question": "Can I exchange an item for a different size or color?",
-      "paraphrases": ["size ya color exchange kar sakte hain kya", "साइज़ या कलर एक्सचेंज कर सकते हैं क्या"],
+      "paraphrases": [
+        "size ya color exchange kar sakte hain kya",
+        "साइज़ या कलर एक्सचेंज कर सकते हैं क्या",
+        "exchange policy kya hai",
+        "aapki exchange policy kya hai",
+        "आपकी exchange policy क्या है",
+        "exchange kaise karein",
+        "size badalna hai",
+        "size बदलना है",
+        "exchange rule"
+      ],
       "answer": "Items with the 10 Day Free Returns and Exchange policy can be exchanged for a different size or color within 10 days, based on availability, or returned for a full refund.",
       "tags": ["returns", "exchange"],
       "source": "returns_policy"

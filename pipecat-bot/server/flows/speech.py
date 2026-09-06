@@ -29,3 +29,19 @@ def empty_speech(deps, kind):
     index = deps.speech_counts.get(kind, 0)
     deps.speech_counts[kind] = index + 1
     return variants[index % len(variants)]
+
+
+def policy_refusal(code: str, fallback: str) -> str:
+    """Stable caller-facing explanation for a deterministic policy denial."""
+    messages = {
+        'already_shipped': 'यह order shipped या dispatch हो चुका है, इसलिए cancellation available नहीं है। Delivery के बाद मैं return eligibility check कर सकता हूँ।',
+        'not_delivered': 'यह order अभी deliver नहीं हुआ है, इसलिए यह request अभी available नहीं है।',
+        'non_returnable': 'यह item return policy के तहत eligible नहीं है, इसलिए return request create नहीं हो सकती।',
+        'window_closed': 'इस item की return window closed हो चुकी है, इसलिए return या exchange available नहीं है।',
+        'out_of_stock': 'अभी requested replacement या exchange variant in stock नहीं है। मैं available refund options check कर सकता हूँ।',
+        'already_replaced': 'इस item का replacement पहले ही हो चुका है, इसलिए दूसरा replacement available नहीं है।',
+        'already_active': 'इस item के लिए पहले से एक open return request है।',
+        'already_completed': 'यह delivery पहले ही पूरी हो चुकी है, इसलिए इसे reschedule नहीं किया जा सकता।',
+        'dispute_window_closed': 'Missing-delivery dispute delivery notification के 3 दिनों के भीतर report करनी होती है।',
+    }
+    return messages.get(code, fallback)

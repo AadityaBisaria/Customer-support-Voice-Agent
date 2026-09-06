@@ -12,6 +12,22 @@ from .shared import routing, task_messages
 _PHONE = PhoneSlot(name="phone", prompt="Apna registered mobile number boliye")
 
 
+def _verification_prompt(flow_manager) -> str:
+    """Keep legacy node wiring aligned with the active stack-based runtime."""
+    stack = getattr(flow_manager, "stack", None)
+    suspended = stack.frames[-2] if stack and len(stack.frames) >= 2 else None
+    flow_id = getattr(suspended, "flow_id", None)
+    prompts = {
+        "order_status": "आपके orders retrieve करने के लिए मुझे आपका registered mobile number चाहिए।",
+        "cancel_order": "आपका cancellation request check करने के लिए मुझे आपका registered mobile number चाहिए।",
+        "return_order": "Return request शुरू करने के लिए अपना registered mobile number बताइए।",
+        "exchange_item": "Exchange options check करने के लिए अपना registered mobile number बताइए।",
+        "reschedule_delivery": "Delivery reschedule करने के लिए अपना registered mobile number बताइए।",
+        "missing_delivery": "Delivery investigation open करने के लिए मुझे आपका registered mobile number चाहिए।",
+    }
+    return prompts.get(flow_id, "अपना registered mobile number बताइए।")
+
+
 async def make_greet_unauth(deps, flow_manager) -> dict:
     return {
         "name": "greet_unauth",
@@ -117,11 +133,12 @@ async def make_verify_phone(deps, flow_manager, *, note: str | None = None) -> d
         slot=_PHONE, on_fit=on_fit, on_exhausted=on_exhausted, max_attempts=3
     )
     prefix = f"{note} " if note else ""
+    prompt = _verification_prompt(flow_manager)
     return {
         "name": "verify_phone",
         "task_messages": task_messages(
             deps,
-            f"{prefix}Ask the caller to provide their registered mobile number. "
+            f"{prefix}{prompt} "
             "If what they said wasn't a number, ask again.",
         ),
         "functions": [],

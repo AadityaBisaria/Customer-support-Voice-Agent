@@ -54,7 +54,7 @@ from pydantic import BaseModel
 
 from flows import SessionDeps
 from flows.command_processor import CommandProcessor
-from flows.commands import CommandBatch
+from flows.commands import COMPILER_PROMPT, vertex_compiler_schema
 from language import (
     Band,
     LanguageBandTracker,
@@ -172,10 +172,6 @@ async def run_bot(
         except ValueError:
             logger.info("Caller number {} not usable for lookup", caller_number)
 
-    # Late-bound: the FlowManager needs the worker, which needs the pipeline,
-    # which needs these processors — closures read it after construction.
-    flow_manager: FlowManager | None = None
-
     # Speech-to-Text: Sarvam realtime (saaras:v3-realtime), codemix mode for Hinglish.
     # Server-side VAD does the endpointing; should_interrupt=False keeps backchannels
     # ("haan", "achha") from barging in while the bot is speaking.
@@ -219,38 +215,30 @@ async def run_bot(
         project_id=vertex_project_id,
         credentials_path=vertex_credentials_path,
         location=os.getenv("VERTEX_LOCATION", "asia-south1"),
+        # The command compiler uses Vertex constrained JSON output. It has no
+        # callable tools: entity resolution and all mutations are backend-only.
+        tools=[],
         settings=GoogleVertexLLMService.Settings(
             model=os.getenv("VERTEX_MODEL", "gemini-2.5-flash"),
             system_instruction=(
-                "You are a friendly customer-support voice assistant that "
-                "answers questions from Aryan Retail's public help pages about returns, "
-                "refunds, replacements, and deliveries. Your responses will be spoken aloud, so avoid emojis, "
-                "bullet points, or other formatting that can't be spoken. Keep replies "
-                "to one or two short sentences. "
-                "You speak both English and Hinglish. Always follow the current "
-                "[LANG-STYLE] directive for how much Hindi versus English to use. "
-                "For knowledge questions, answer ONLY from the [RAG] context provided "
-                "for the current question; if it says there is no answer, say plainly "
-                "that you don't have that information — never invent policies, "
-                "timelines, or amounts. "
-                "When functions are available for what the user asked, call the "
-                "matching function instead of describing it. Never say function or "
-                "tool names out loud. When told to read back a confirmation, speak "
-                "it exactly as given."
+                "You are the Aryan Retail assistant. Your output is interpreted by "
+                "a deterministic command compiler, not spoken directly."
             ),
             # Greedy decoding: tool-calling at flow nodes must be dependable
             # and reproducible — a 4B model with sampling will sometimes chat
             # instead of calling the matching function, and evals need the
             # same branch every run.
             temperature=0.0,
-            extra={'response_mime_type': 'application/json',
-                   'response_json_schema': CommandBatch.model_json_schema()},
+            extra={
+                'response_mime_type': 'application/json',
+                'response_json_schema': vertex_compiler_schema(),
+            },
         ),
     )
 
-    system_instruction = getattr(getattr(llm, "_settings", None), "system_instruction", None)
-    if isinstance(system_instruction, str):
-        transcript.log_turn("system", system_instruction)
+    # The per-turn compiler instruction is the system instruction actually sent
+    # to Vertex. Keep it in the audit log alongside language directives.
+    transcript.log_turn("system", COMPILER_PROMPT)
 
     # Mirrors the caller's Hindi/English mix by swapping a [LANG-STYLE]
     # directive in the context whenever their language band changes. The
@@ -261,9 +249,8 @@ async def run_bot(
     user_transcript = ConversationTranscriptProcessor(transcript=transcript, role="user")
     assistant_transcript = ConversationTranscriptProcessor(transcript=transcript, role="assistant")
 
-    # Deterministic gates in front of the LLM: while a confirm or phone-verify
-    # node is active, the user's turn is classified by a dialogue Slot before
-    # it can reach the model.
+    # A deterministic fast path handles phone, explicit menu selections, and
+    # confirmation. All other turns make exactly one compiler invocation.
     command_processor = CommandProcessor(llm=llm, deps=deps, index=qa_index())
 
     # Grounds knowledge questions in the Aryan Retail help corpus, but only at
@@ -319,9 +306,10 @@ async def run_bot(
         deps.store = SqliteSupportStore.seeded_in_memory(IstClock())
         deps.customer = await deps.store.customer_by_phone(caller_phone) if caller_phone else None
         if deps.customer:
-            logger.info("Caller ID matched customer {}", deps.customer.name)
+            logger.info("Caller ID matched customer {} {}", deps.customer.first_name, deps.customer.last_name)
         deps.verify_attempts = 0
         deps.wip.clear()
+        deps.speech_counts.clear()
         language_tracker.reset()
         from flows.runtime import CommandRuntime
         command_processor.runtime = CommandRuntime(deps)
