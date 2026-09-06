@@ -101,6 +101,24 @@ def test_policy_retrieval_requires_a_clear_winner():
     assert ambiguous.retrieve('exchange policy') == {}
 
 
+def test_exact_policy_surface_wins_even_when_semantic_candidates_are_close():
+    from flows.command_processor import CommandProcessor
+
+    overview = QAEntry('overview', 'What is the general return policy?', 'overview answer',
+                       paraphrases=('what is your return policy',))
+    special = QAEntry('special', 'What is the 10 day return policy?', 'special answer')
+
+    class Index:
+        def embed_query(self, text):
+            return text
+
+        def search(self, query, top_k=8):
+            return [(special, 0.68), (overview, 0.67)]
+
+    processor = CommandProcessor(llm=None, deps=None, index=Index())
+    assert processor.retrieve('What is your return policy') == {'overview': 'overview answer'}
+
+
 async def test_vikram_request_survives_auth_and_reports_empty(deps):
     runtime = CommandRuntime(deps)
     assert 'registered mobile' in await runtime.apply(batch(start()))
@@ -330,6 +348,16 @@ async def test_resolve_intent_refuses_delivered_kurta_cancel_and_returns_to_tria
     assert 'pending' not in runtime.state
 
 
+async def test_shipped_order_refusal_keeps_actionable_capabilities(deps):
+    runtime = await verified(deps, '9123456789')
+    refusal = await runtime.apply(batch(resolve('cancel_order', 'wireless headphones')))
+    assert 'reschedule' in refusal
+    answer = await runtime.shortcut('what can I do?')
+    assert 'delivery track' in answer
+    assert 'delivery reschedule' in answer
+    assert 'cancel या refund' in answer
+
+
 async def test_same_flow_order_picker_correction_reresolves_full_account(deps):
     runtime = await verified(deps)
     await runtime.apply(batch(start('cancel_order')))
@@ -435,3 +463,28 @@ async def test_one_inference_for_initial_request_zero_for_phone(deps, monkeypatc
     assert model.calls == 1
     assert 'registered mobile' in spoken[0]
     assert 'कोई orders नहीं' in spoken[1]
+
+
+async def test_ungrounded_policy_question_abstains_without_calling_llm(deps, monkeypatch):
+    from flows.command_processor import CommandProcessor
+
+    class Model:
+        calls = 0
+
+        async def run_inference(self, *args, **kwargs):
+            self.calls += 1
+            raise AssertionError('Ungrounded policy questions must not reach the LLM')
+
+    model = Model()
+    processor = CommandProcessor(llm=model, deps=deps, index=None)
+    import asyncio
+    monkeypatch.setattr(processor, 'create_task', asyncio.create_task)
+    spoken = []
+
+    async def speak(text, generation):
+        spoken.append(text)
+
+    monkeypatch.setattr(processor, 'speak', speak)
+    await processor.handle('What is the jewellery return policy?', [], 0)
+    assert model.calls == 0
+    assert 'verified जानकारी नहीं है' in spoken[0]

@@ -216,6 +216,42 @@ class CommandRuntime:
         suspended = self.stack.frames[-2] if len(self.stack.frames) >= 2 else None
         return verification_prompt(suspended.flow_id if suspended else None)
 
+    def remember_capabilities(self, *, title, now, later=(), unavailable=()):
+        """Keep a short factual hand-off after an eligibility refusal."""
+        self.state['last_capabilities'] = {
+            'title': title, 'now': tuple(now), 'later': tuple(later),
+            'unavailable': tuple(unavailable),
+        }
+        self.event('capabilities_recorded', title=title, now=list(now),
+                   later=list(later), unavailable=list(unavailable))
+
+    def capability_answer(self):
+        context = self.state.get('last_capabilities')
+        if not context:
+            return None
+        now = ', '.join(context['now'])
+        later = ', '.join(context['later'])
+        unavailable = ', '.join(context['unavailable'])
+        parts = [f"{context['title']} के लिए अभी आप {now} कर सकते हैं."]
+        if later:
+            parts.append(f"Delivery के बाद {later}.")
+        if unavailable:
+            parts.append(f"अभी {unavailable} available नहीं है.")
+        return ' '.join(parts)
+
+    @staticmethod
+    def is_capability_question(text):
+        normalized = norm(text)
+        return any(phrase in normalized for phrase in (
+            'what can', 'what do', 'what are my options', 'kya kar sakte',
+            'kya kar sakta', 'क्या कर सकते', 'क्या कर सकता', 'options kya',
+        ))
+
+    def policy_abstention(self):
+        answer = ('मेरे पास इस specific policy की verified जानकारी नहीं है। मैं orders, returns, '
+                  'refunds, exchanges, और delivery से जुड़े सवालों में मदद कर सकता हूँ।')
+        return answer + (' ' + self.render() if self.node and self.stack.active else '')
+
     async def order_surface(self, *, presentation_ids=None):
         if self.deps.customer is None:
             return None
@@ -374,16 +410,32 @@ class CommandRuntime:
         # This is an authoritative pre-action check. Store mutations repeat
         # their own checks at execution time, closing the stale-read window.
         if action == 'cancel_order' and status != 'placed':
+            if status in {'shipped', 'out_for_delivery'}:
+                self.remember_capabilities(
+                    title=title,
+                    now=('delivery track', 'delivery reschedule'),
+                    later=('damage, defect, या wrong item report कर सकते हैं'),
+                    unavailable=('cancel या refund',),
+                )
             self._open_triage(reason='cancel_ineligible')
             if status == 'delivered':
                 return (f'आपका {title} already delivered है, इसलिए इसे cancel नहीं किया जा सकता। '
                         'अगर item eligible है तो return या exchange options check किए जा सकते हैं।')
             if status == 'cancelled':
                 return f'आपका {title} order पहले ही cancelled है। मैं उसका refund status check कर सकता हूँ।'
-            return f'आपका {title} dispatch हो चुका है, इसलिए cancellation available नहीं है।'
+            return (f'आपका {title} dispatch हो चुका है, इसलिए cancellation available नहीं है। '
+                    'मैं delivery track या reschedule करने में मदद कर सकता हूँ।')
         if action in {'return_order', 'exchange_item'} and status != 'delivered':
+            if status in {'shipped', 'out_for_delivery'}:
+                self.remember_capabilities(
+                    title=title,
+                    now=('delivery track', 'delivery reschedule'),
+                    later=('delivery के बाद item issue report कर सकते हैं'),
+                    unavailable=('return, exchange, या refund',),
+                )
             self._open_triage(reason='return_before_delivery')
-            return f'आपका {title} अभी delivered नहीं है, इसलिए return या exchange अभी शुरू नहीं हो सकता।'
+            return (f'आपका {title} अभी delivered नहीं है, इसलिए return या exchange अभी शुरू नहीं हो सकता। '
+                    'मैं delivery track या reschedule करने में मदद कर सकता हूँ।')
         if action == 'reschedule_delivery' and status not in {'shipped', 'out_for_delivery'}:
             self._open_triage(reason='reschedule_ineligible')
             return f'आपके {title} के लिए कोई active shipment नहीं है जिसे reschedule किया जा सके।'
@@ -391,6 +443,7 @@ class CommandRuntime:
             self._open_triage(reason='dispute_before_delivery')
             return f'आपका {title} अभी delivered marked नहीं है, इसलिए missing-delivery investigation शुरू नहीं हो सकती।'
 
+        self.state.pop('last_capabilities', None)
         request_id = 'resolved_' + uuid4().hex[:8]
         commands = [
             {'type': 'START_FLOW', 'request_id': request_id, 'flow_id': action},
@@ -485,6 +538,10 @@ class CommandRuntime:
             return self.last_speech
         if normalized in {'hmm', 'achha', 'अच्छा'}:
             return ''
+        if self.is_capability_question(text):
+            if answer := self.capability_answer():
+                self.event('capabilities_requested')
+                return answer
         # An empty account is a store fact, not an LLM judgement. A clearly
         # personal order request is answered immediately; a generic FAQ such
         # as "what is the return policy" still reaches the grounded compiler.

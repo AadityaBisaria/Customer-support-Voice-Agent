@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from time import monotonic
 
 from loguru import logger
@@ -56,6 +57,30 @@ class CommandProcessor(FrameProcessor):
         await self.speak('नमस्ते! मैं Aryan Retail assistant हूँ। मैं आपकी कैसे मदद कर सकता हूँ?',
                          self.generation)
 
+    @staticmethod
+    def _lexical_tokens(text):
+        return set(re.findall(r'[a-z0-9]+', text.casefold()))
+
+    @classmethod
+    def _lexical_score(cls, entry, query_tokens):
+        surfaces = (entry.question, *entry.paraphrases, *entry.tags)
+        entry_tokens = set().union(*(cls._lexical_tokens(surface) for surface in surfaces))
+        return len(query_tokens & entry_tokens) / max(1, len(query_tokens))
+
+    @staticmethod
+    def _exact_surface(entry, text):
+        query = ' '.join(text.casefold().split())
+        return any(query == ' '.join(surface.casefold().split())
+                   for surface in (entry.question, *entry.paraphrases))
+
+    @staticmethod
+    def _policy_question(text):
+        normalized = text.casefold()
+        return any(phrase in normalized for phrase in (
+            'policy', 'returnable', 'replacement only', 'refund rule',
+            'refund policy', 'return rule', 'रिटर्न पॉलिसी', 'पॉलिसी',
+        ))
+
     def retrieve(self, text):
         """Return one grounded policy source only when retrieval is decisive.
 
@@ -67,16 +92,26 @@ class CommandProcessor(FrameProcessor):
         """
         if self.index is None:
             return {}
-        results = self.index.search(self.index.embed_query(text), top_k=3)
+        results = self.index.search(self.index.embed_query(text), top_k=8)
         if not results:
             return {}
-        winner, winner_score = results[0]
-        runner_up_score = results[1][1] if len(results) > 1 else None
+        query_tokens = self._lexical_tokens(text)
+        # Semantic search supplies recall; a modest lexical component reranks
+        # close candidates without letting one shared word override the
+        # embedding score. Exact corpus surfaces remain the strongest signal.
+        ranked = sorted(
+            ((entry, semantic, semantic + 0.12 * self._lexical_score(entry, query_tokens))
+             for entry, semantic in results),
+            key=lambda candidate: candidate[2], reverse=True,
+        )
+        winner, winner_score, _ = ranked[0]
+        runner_up_score = ranked[1][1] if len(ranked) > 1 else None
         floor = 0.60
         margin = 0.10
         if winner_score < floor:
             return {}
-        if runner_up_score is not None and winner_score - runner_up_score < margin:
+        if (runner_up_score is not None and winner_score - runner_up_score < margin and
+                not self._exact_surface(winner, text)):
             return {}
         return {winner.id: winner.answer}
 
@@ -120,6 +155,11 @@ class CommandProcessor(FrameProcessor):
                         sources=len(sources),
                     )
                     if generation != self.generation:
+                        return
+                    if not sources and self._policy_question(text):
+                        self.runtime.event('policy_abstained', turn_id=generation)
+                        speech = self.runtime.policy_abstention()
+                        await self.speak(speech, generation)
                         return
                     prompt = {'state': self.runtime.snapshot(), 'recent_turns': history,
                               'policy_sources': sources, 'utterance': text}
