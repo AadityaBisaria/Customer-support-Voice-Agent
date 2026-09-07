@@ -6,6 +6,7 @@ from flows.commands import CommandBatch, CompilerBatch, vertex_compiler_schema
 from flows.runtime import CommandRuntime
 from flows.slots import DynamicOrderReferenceSlot
 from flows.stack import FlowStack
+from language import Band
 from rag.index import QAEntry
 from store.domain import OrderId, OrderStatus, PhoneNumber
 
@@ -150,6 +151,16 @@ async def test_hindi_inflected_item_resolves_after_verification(deps):
     assert 'delivered' in answer
     assert runtime.current_node == 'triage'
     assert not runtime.stack.frames
+
+
+async def test_english_band_uses_english_verification_prompt(deps):
+    assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+    runtime = CommandRuntime(deps)
+
+    prompt = await runtime.apply(batch(resolve('return_order', 'phone case')))
+
+    assert prompt.startswith('To start a return request')
+    assert not any('ऀ' <= char <= 'ॿ' for char in prompt)
 
 
 async def test_unmatched_post_verification_entity_does_not_default_to_eligible_order(deps):
@@ -315,6 +326,35 @@ async def test_active_exchange_reason_and_variant_are_fit_before_routing(deps):
     assert runtime.stack.active.slots['variant_ref'] == 'l'
     assert runtime.deps.wip['new_variant_label'] == 'L teal'
     assert 'exchange' in answer
+
+
+async def test_invalid_reason_is_explained_and_reprompted_without_compiler(deps):
+    assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+    runtime = await verified(deps)
+    await runtime.apply(batch(start('return_order'), slot('order_ref', 'AMZ-1002'), slot('item_ref', '3')))
+
+    answer = await runtime.shortcut('exercise issue')
+
+    assert '"exercise issue" is not a valid issue' in answer
+    assert 'damage, defect, wrong item, missing parts, size issue' in answer
+    assert runtime.current_node == 'select_reason'
+    assert 'reason' not in runtime.stack.active.slots
+
+
+async def test_single_refund_option_enters_confirmation_and_accepts_punjabi_yes(deps):
+    assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+    runtime = await verified(deps)
+
+    prompt = await runtime.apply(batch(
+        start('return_order'), slot('order_ref', 'AMZ-1002'),
+        slot('item_ref', '3'), slot('reason', 'size_issue'),
+    ))
+
+    assert runtime.current_node == 'confirm_mutation'
+    assert prompt.startswith('I can offer you a refund for the running shoes')
+    result = await runtime.shortcut('ਹਾਂਜੀ')
+    assert runtime.current_node == 'triage'
+    assert 'return is created' in result
 
 
 @pytest.mark.parametrize('utterance', ['refund दे दो', 'refund नहीं, exchange', 'refund ఏదో'])

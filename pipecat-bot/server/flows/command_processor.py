@@ -20,7 +20,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from .commands import COMPILER_PROMPT, CompilerBatch
-from .runtime import CLARIFICATION, CommandRuntime
+from .runtime import CommandRuntime, clarification
 
 
 class CommandProcessor(FrameProcessor):
@@ -54,6 +54,9 @@ class CommandProcessor(FrameProcessor):
         await self.push_frame(LLMFullResponseEndFrame())
 
     async def greet(self):
+        # There is no caller language signal yet, so start in the product's
+        # default Hinglish style. The first final caller utterance can still
+        # immediately switch all later responses to English.
         await self.speak('नमस्ते! मैं Aryan Retail assistant हूँ। मैं आपकी कैसे मदद कर सकता हूँ?',
                          self.generation)
 
@@ -203,11 +206,15 @@ class CommandProcessor(FrameProcessor):
                     await self.push_frame(EndWorkerFrame())
             except (ValueError, KeyError):
                 logger.exception('Invalid semantic command or selection')
-                await self.speak(CLARIFICATION, generation)
+                await self.speak(clarification(self.runtime.deps), generation)
             except Exception:
                 logger.exception('Command turn failed')
-                await self.speak('अभी जानकारी check नहीं हो पाई। कृपया थोड़ी देर बाद फिर कोशिश कीजिए।',
-                                 generation)
+                await self.speak(
+                    ('I could not check that information right now. Please try again shortly.'
+                     if self.runtime.deps.tracker.band.value == 'MOSTLY_ENGLISH'
+                     else 'अभी जानकारी check नहीं हो पाई। कृपया थोड़ी देर बाद फिर कोशिश कीजिए।'),
+                    generation,
+                )
             finally:
                 self._turn_started.pop(generation, None)
                 self.runtime.event('turn_completed', turn_id=generation, llm_calls=calls,

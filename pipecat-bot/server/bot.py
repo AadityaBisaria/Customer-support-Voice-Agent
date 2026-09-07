@@ -87,6 +87,27 @@ def qa_index() -> QAIndex:
     return QAIndex.load(Path(__file__).parent / "rag" / "corpus" / "qa.json")
 
 
+def support_store() -> SqliteSupportStore:
+    """Open the configured demo store without erasing prior call outcomes.
+
+    The default file-backed store is inspectable with any SQLite client. Tests
+    or isolated calls can opt into the old ephemeral behaviour with
+    ``SUPPORT_STORE_PATH=:memory:``.
+    """
+    configured_path = os.getenv("SUPPORT_STORE_PATH", "").strip()
+    if configured_path == ":memory:":
+        return SqliteSupportStore.seeded_in_memory(IstClock())
+
+    database_path = Path(configured_path).expanduser() if configured_path else (
+        Path(__file__).parent / "data" / "support.db"
+    )
+    if not database_path.is_absolute():
+        database_path = Path(__file__).parent / database_path
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Using persistent demo store at {}", database_path)
+    return SqliteSupportStore.seeded_at_path(IstClock(), str(database_path))
+
+
 class CallInfo(BaseModel):
     """Caller details fetched from the Twilio REST API."""
 
@@ -160,7 +181,7 @@ async def run_bot(
         getattr(runner_args, "session_id", None),
     )
     deps = SessionDeps(
-        store=SqliteSupportStore.seeded_in_memory(IstClock()),
+        store=support_store(),
         tracker=language_tracker,
         clock=IstClock(),
         transcript=transcript,
@@ -172,9 +193,7 @@ async def run_bot(
         except ValueError:
             logger.info("Caller number {} not usable for lookup", caller_number)
 
-    # Speech-to-Text: Sarvam realtime (saaras:v3-realtime), codemix mode for Hinglish.
-    # Server-side VAD does the endpointing; should_interrupt=False keeps backchannels
-    # ("haan", "achha") from barging in while the bot is speaking.
+
     stt = SarvamRealtimeSTTService(
         api_key=os.getenv("SARVAM_API_KEY"),
         should_interrupt=False,
@@ -185,11 +204,7 @@ async def run_bot(
         ),
     )
 
-    # Text-to-Speech: Sarvam bulbul:v3 speaks code-mixed Devanagari+Latin in one pass,
-    # so one voice covers any Hindi/English blend. The service defaults to bulbul:v2 —
-    # the model must be set explicitly.
-    # Sarvam bulbul:v3 defaults to a 24 kHz output; forcing 8 kHz makes the
-    # delivered PCM sound garbled/static even when the TTS backend is working.
+   
     tts = SarvamTTSService(
         api_key=os.getenv("SARVAM_API_KEY"),
         sample_rate=int(os.getenv("SARVAM_TTS_SAMPLE_RATE", "24000")),
@@ -201,7 +216,6 @@ async def run_bot(
         ),
     )
 
-    # LLM service: Gemini through Vertex AI using a service-account credential.
     vertex_project_id = os.getenv("VERTEX_PROJECT_ID", "gen-lang-client-0158129197")
     vertex_credentials_path = os.getenv(
         "VERTEX_CREDENTIALS_PATH",
@@ -303,7 +317,7 @@ async def run_bot(
         # Every connection is a new call: fresh mock data, fresh identity,
         # fresh language estimate, no armed gate. (The eval transport reuses
         # this session across runs, so this is also what keeps runs isolated.)
-        deps.store = SqliteSupportStore.seeded_in_memory(IstClock())
+        deps.store = support_store()
         deps.customer = await deps.store.customer_by_phone(caller_phone) if caller_phone else None
         if deps.customer:
             logger.info("Caller ID matched customer {} {}", deps.customer.first_name, deps.customer.last_name)

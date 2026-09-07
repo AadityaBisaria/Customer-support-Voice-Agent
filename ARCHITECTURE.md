@@ -199,3 +199,11 @@ server/
   store/                       domain, policy, protocol, SQLite seed adapter
   transcript.py                append-only JSONL audit writer
 ```
+
+## Demo data persistence
+
+`bot.py` opens `server/data/support.db` by default. `SqliteSupportStore`
+applies migrations, then seeds the database only if the `customers` table is
+empty. New calls therefore receive fresh conversational state but see the
+same order, return, refund, delivery, and append-only `domain_events` data.
+Set `SUPPORT_STORE_PATH=:memory:` for isolated evaluation-style calls.

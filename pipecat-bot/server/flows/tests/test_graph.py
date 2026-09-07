@@ -22,6 +22,7 @@ from flows.nodes import (
     make_verify_phone,
 )
 from store.domain import OrderId, PhoneNumber
+from language import Band
 
 from .conftest import FakeFlowManager, tool_names
 
@@ -145,10 +146,20 @@ class TestReturnPath:
             {"order_id": "AMZ-3003", "order_item_id": 11, "item_title": "lamp", "reason": "damaged"}
         )
         node = await make_select_resolution(deps, fm)
-        schema = next(s for s in node["functions"] if s.name == "select_resolution")
-        assert schema.properties["resolution"]["enum"] == ["refund"]
+        assert node["name"] == "confirm_mutation"
         assert 'refund' in node['speech']
-        assert 'replacement' not in node['speech']
+
+    async def test_single_resolution_is_a_natural_offer_in_english(self, deps, fm):
+        assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+        deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9000000001"))
+        deps.wip.update(
+            {"order_id": "AMZ-3003", "order_item_id": 11, "item_title": "lamp", "reason": "damaged"}
+        )
+
+        node = await make_select_resolution(deps, fm)
+
+        assert node['name'] == 'confirm_mutation'
+        assert node['speech'].startswith('I can offer you a refund for the study desk lamp')
 
     async def test_out_of_window_goes_to_nothing_here(self, deps, fm):
         deps.customer = await deps.store.customer_by_phone(PhoneNumber.parse("9000000001"))

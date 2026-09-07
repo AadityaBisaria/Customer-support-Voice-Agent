@@ -28,6 +28,14 @@ def store() -> SqliteSupportStore:
 
 
 class TestMigrations:
+    def test_file_database_uses_wal_for_concurrent_viewers(self, tmp_path):
+        conn = connect(str(tmp_path / "store.db"))
+        try:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+            assert conn.execute("PRAGMA busy_timeout").fetchone()[0] > 0
+        finally:
+            conn.close()
+
     def test_connect_twice_is_idempotent(self, tmp_path):
         path = str(tmp_path / "store.db")
         conn1 = connect(path)
@@ -54,6 +62,16 @@ class TestMigrations:
 
 
 class TestSeedIntegrity:
+    async def test_file_seed_is_not_reapplied_on_reconnect(self, tmp_path):
+        path = str(tmp_path / "support.db")
+        first = SqliteSupportStore.seeded_at_path(FixedClock(NOW), path)
+        await first.cancel_order(order_id=OrderId("AMZ-1004"), idempotency_key="persist-1")
+
+        reopened = SqliteSupportStore.seeded_at_path(FixedClock(NOW), path)
+        order = await reopened.order_with_items(OrderId("AMZ-1004"))
+
+        assert order.status is OrderStatus.CANCELLED
+
     async def test_customers_by_phone(self, store):
         priya = await store.customer_by_phone(PhoneNumber("9876543210"))
         assert priya is not None and priya.name == "Priya Sharma"

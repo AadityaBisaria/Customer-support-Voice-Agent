@@ -33,7 +33,7 @@ from ..pending import (
     speak_date,
     speak_money,
 )
-from ..speech import empty_speech, policy_refusal
+from ..speech import banded_speech, empty_speech, policy_refusal
 from .access import make_triage
 from .shared import deps_for, routing, task_messages
 from .terminal import make_nothing_here, make_wrap
@@ -248,9 +248,15 @@ async def make_select_reason(deps, flow_manager) -> dict:
         required=["reason"],
         handler=handler,
     )
+    item_title = deps.wip.get('item_title', 'Item')
+    speech = banded_speech(
+        deps,
+        f"What is the issue with the {item_title}: damage, defect, wrong item, missing parts, size issue, or no longer needed?",
+        f"{item_title} में क्या problem है—damage, defect, wrong item, missing parts, size issue, या अब इसकी ज़रूरत नहीं है?",
+    )
     return {
         "name": "select_reason",
-        "speech": f"{deps.wip.get('item_title', 'Item')} में क्या problem है—damage, defect, wrong item, missing parts, size issue, या अब इसकी ज़रूरत नहीं है?",
+        "speech": speech,
         "task_messages": task_messages(
             deps,
             f"Ask what the problem is with the {deps.wip.get('item_title', 'item')}: damaged, defective, wrong item, "
@@ -285,11 +291,19 @@ async def make_select_resolution(deps, flow_manager) -> dict:
             prior_requests=priors,
         )
     except PolicyError as e:
-        return await make_nothing_here(deps, flow_manager, policy_refusal(e.code, e.message))
+        return await make_nothing_here(deps, flow_manager, policy_refusal(deps, e.code, e.message))
 
     deps.wip["offered"] = sorted(r.value for r in offered)
     deps.wip["product_id"] = detail.product.product_id
     deps.wip["variant_id"] = str(detail.item.variant_id)
+
+    # A single policy-approved resolution is not a user choice. Bind it in
+    # code and move straight to the actual mutation confirmation gate. This
+    # prevents a misleading prompt from leaving the caller stranded in a
+    # resolution enum that only accepts one value.
+    if len(deps.wip["offered"]) == 1:
+        deps.wip["resolution"] = deps.wip["offered"][0]
+        return await _after_resolution(deps, flow_manager)
 
     async def handler(args, flow_manager):
         d = deps_for(flow_manager)
@@ -306,9 +320,15 @@ async def make_select_resolution(deps, flow_manager) -> dict:
         required=["resolution"],
         handler=handler,
     )
+    options = deps.wip["offered"]
+    speech = banded_speech(
+        deps,
+        f"The available options are: {', '.join(options)}. Which would you prefer?",
+        f"आपके लिए ये options available हैं: {', '.join(options)}। आप क्या चाहेंगे?",
+    )
     return {
         "name": "select_resolution",
-        "speech": f"आपके लिए ये options available हैं: {', '.join(deps.wip['offered'])}। आप क्या चाहेंगे?",
+        "speech": speech,
         "task_messages": task_messages(
             deps, f"Offer these available options: {', '.join(deps.wip['offered'])}. Call select_resolution with their choice."
         ),
@@ -355,7 +375,7 @@ async def make_select_exchange_variant(deps, flow_manager) -> dict:
         return await make_nothing_here(
             deps,
             flow_manager,
-            policy_refusal('out_of_stock', 'Other sizes or colors for this item are currently out of stock.'),
+            policy_refusal(deps, 'out_of_stock', 'Other sizes or colors for this item are currently out of stock.'),
         )
 
     labels = {
@@ -480,7 +500,7 @@ async def _build_cancel_confirm(deps, flow_manager, order_id: OrderId) -> dict:
         from store.policy import check_cancellable
         check_cancellable(order)
     except PolicyError as e:
-        return await make_nothing_here(deps, flow_manager, policy_refusal(e.code, e.message))
+        return await make_nothing_here(deps, flow_manager, policy_refusal(deps, e.code, e.message))
 
     titles = ", ".join(d.product.title for d in await deps.store.items_for_order(order_id))
     refund_line = (

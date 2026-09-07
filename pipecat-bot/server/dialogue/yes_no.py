@@ -61,6 +61,9 @@ _YES_FORMS = [
     "कर दीजिए",
     "करो",
     "सही है",
+    # Punjabi / Gurmukhi
+    "ਹਾਂਜੀ",
+    "ਹਾਂ",
 ]
 
 _NO_FORMS = [

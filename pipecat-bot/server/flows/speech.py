@@ -2,6 +2,11 @@
 
 from language import Band
 
+
+def banded_speech(deps, english: str, hinglish: str) -> str:
+    """Select code-rendered speech using the same band as the LLM context."""
+    return english if deps.tracker.band is Band.MOSTLY_ENGLISH else hinglish
+
 EMPTY = {
     'orders': (
         ('There are no orders on this account.', 'I checked this account and found no orders.'),
@@ -31,7 +36,7 @@ def empty_speech(deps, kind):
     return variants[index % len(variants)]
 
 
-def policy_refusal(code: str, fallback: str) -> str:
+def policy_refusal(deps, code: str, fallback: str) -> str:
     """Stable caller-facing explanation for a deterministic policy denial."""
     messages = {
         'already_shipped': 'यह order shipped या dispatch हो चुका है, इसलिए cancellation available नहीं है। Delivery के बाद मैं return eligibility check कर सकता हूँ।',
@@ -44,4 +49,15 @@ def policy_refusal(code: str, fallback: str) -> str:
         'already_completed': 'यह delivery पहले ही पूरी हो चुकी है, इसलिए इसे reschedule नहीं किया जा सकता।',
         'dispute_window_closed': 'Missing-delivery dispute delivery notification के 3 दिनों के भीतर report करनी होती है।',
     }
-    return messages.get(code, fallback)
+    english = {
+        'already_shipped': 'This order has already been dispatched, so cancellation is not available. I can help you track or reschedule the delivery.',
+        'not_delivered': 'This order has not been delivered yet, so this request is not available at the moment.',
+        'non_returnable': 'This item is not eligible under its return policy, so I cannot create a return request.',
+        'window_closed': 'The return window for this item has closed, so return or exchange is no longer available.',
+        'out_of_stock': 'The requested replacement or exchange variant is currently out of stock. I can check the available refund options.',
+        'already_replaced': 'This item has already been replaced, so another replacement is not available.',
+        'already_active': 'There is already an open return request for this item.',
+        'already_completed': 'This delivery has already been completed, so it cannot be rescheduled.',
+        'dispute_window_closed': 'A missing-delivery dispute must be reported within three days of the delivery notification.',
+    }
+    return banded_speech(deps, english.get(code, fallback), messages.get(code, fallback))

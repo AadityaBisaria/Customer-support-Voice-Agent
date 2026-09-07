@@ -273,4 +273,4 @@ def seed(conn: sqlite3.Connection, now: datetime) -> None:
         " payload_json, idempotency_key) VALUES (?,?,?,?,?,NULL)",
         (to_utc_iso(now), "system", "seed", "seeded", "{}"),
     )
-    conn.execute("COMMIT")
+    conn.execute("COMMIT") 

@@ -46,6 +46,10 @@ pipecat-bot/server/logs/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+# Local persisted demo database (created automatically on first bot run).
+pipecat-bot/server/data/*.db
+pipecat-bot/server/data/*.db-shm
+pipecat-bot/server/data/*.db-wal
 
 # Flask stuff:
 instance/

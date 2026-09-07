@@ -22,6 +22,7 @@ _ENTER_ENGLISH = 0.20  # drop below this -> MOSTLY_ENGLISH
 _EXIT_ENGLISH = 0.30  # rise above this to leave MOSTLY_ENGLISH
 _ENTER_HINDI = 0.70  # rise above this -> MOSTLY_HINDI
 _EXIT_HINDI = 0.60  # drop below this to leave MOSTLY_HINDI
+_ENTER_HINGLISH = 0.35  # a clear Hindi contribution overrides stale English
 
 
 class LanguageBandTracker:
@@ -53,6 +54,29 @@ class LanguageBandTracker:
         """
         if ratio is None:
             return None
+
+        # A complete English utterance is an explicit preference, not noisy
+        # evidence. Honour it on this very turn so a caller never needs to
+        # repeat an English request just to stop a Hinglish response.
+        if ratio == 0.0:
+            self._ema = 0.0
+            if self._band is Band.MOSTLY_ENGLISH:
+                return None
+            self._band = Band.MOSTLY_ENGLISH
+            return self._band
+
+        # This product intentionally has two caller-facing styles: English
+        # and Hinglish. A clearly mixed or Hindi-led turn must immediately
+        # override stale English state; otherwise "मुझे अपने running shoes
+        # return करने हैं" can receive an English-only answer after one
+        # previous English turn. Pure Hindi also uses Hinglish by product
+        # choice, rather than a separate all-Hindi mode.
+        if ratio >= _ENTER_HINGLISH:
+            self._ema = ratio
+            if self._band is Band.HINGLISH:
+                return None
+            self._band = Band.HINGLISH
+            return self._band
 
         self._ema = self._alpha * ratio + (1 - self._alpha) * self._ema
 
