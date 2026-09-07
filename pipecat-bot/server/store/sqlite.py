@@ -348,6 +348,25 @@ class SqliteSupportStore:
             seed(store._conn, clock.now())
         return store
 
+    @classmethod
+    def seeded_at_path(cls, clock: Clock, path: str) -> "SqliteSupportStore":
+        """Open a demo database and seed it only when it has no customers.
+
+        Unlike :meth:`seeded_in_memory`, this preserves domain events and
+        mutations made by earlier calls. The empty-database check makes first
+        launch idempotent, so reconnecting never restores a cancelled order.
+        """
+        from .seed import seed
+
+        store = cls(clock=clock, path=path)
+        with store._lock:
+            has_seed_data = store._conn.execute(
+                "SELECT 1 FROM customers LIMIT 1"
+            ).fetchone()
+            if has_seed_data is None:
+                seed(store._conn, clock.now())
+        return store
+
     # ----------------------------------------------------------- Reads
     async def customer_by_phone(self, phone: PhoneNumber) -> Customer | None:
         return await asyncio.to_thread(self._customer_by_phone, phone)

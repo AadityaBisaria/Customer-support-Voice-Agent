@@ -285,7 +285,7 @@ async def make_select_resolution(deps, flow_manager) -> dict:
             prior_requests=priors,
         )
     except PolicyError as e:
-        return await make_nothing_here(deps, flow_manager, policy_refusal(e.code, e.message))
+        return await make_nothing_here(deps, flow_manager, policy_refusal(deps, e.code, e.message))
 
     deps.wip["offered"] = sorted(r.value for r in offered)
     deps.wip["product_id"] = detail.product.product_id
@@ -355,7 +355,7 @@ async def make_select_exchange_variant(deps, flow_manager) -> dict:
         return await make_nothing_here(
             deps,
             flow_manager,
-            policy_refusal('out_of_stock', 'Other sizes or colors for this item are currently out of stock.'),
+            policy_refusal(deps, 'out_of_stock', 'Other sizes or colors for this item are currently out of stock.'),
         )
 
     labels = {
@@ -480,7 +480,7 @@ async def _build_cancel_confirm(deps, flow_manager, order_id: OrderId) -> dict:
         from store.policy import check_cancellable
         check_cancellable(order)
     except PolicyError as e:
-        return await make_nothing_here(deps, flow_manager, policy_refusal(e.code, e.message))
+        return await make_nothing_here(deps, flow_manager, policy_refusal(deps, e.code, e.message))
 
     titles = ", ".join(d.product.title for d in await deps.store.items_for_order(order_id))
     refund_line = (

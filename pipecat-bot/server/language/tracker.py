@@ -54,6 +54,24 @@ class LanguageBandTracker:
         if ratio is None:
             return None
 
+        # A complete English or Devanagari/Hindi utterance is an explicit
+        # preference, not noisy evidence.  Honour it on this very turn so a
+        # caller never needs to repeat an English request just to stop a
+        # Hinglish response. Mixed turns still use the smoothed/hysteretic
+        # behaviour below.
+        if ratio == 0.0:
+            self._ema = 0.0
+            if self._band is Band.MOSTLY_ENGLISH:
+                return None
+            self._band = Band.MOSTLY_ENGLISH
+            return self._band
+        if ratio == 1.0:
+            self._ema = 1.0
+            if self._band is Band.MOSTLY_HINDI:
+                return None
+            self._band = Band.MOSTLY_HINDI
+            return self._band
+
         self._ema = self._alpha * ratio + (1 - self._alpha) * self._ema
 
         new_band = self._band

@@ -13,8 +13,10 @@ def test_starts_in_hinglish():
 
 def test_ema_update():
     tracker = LanguageBandTracker(alpha=0.4, initial=0.5)
-    tracker.observe(1.0)
-    assert tracker.ema == pytest.approx(0.4 * 1.0 + 0.6 * 0.5)
+    # Mixed input remains smoothed; unambiguously single-language input is
+    # intentionally an immediate preference signal.
+    tracker.observe(0.6)
+    assert tracker.ema == pytest.approx(0.4 * 0.6 + 0.6 * 0.5)
 
 
 def test_none_does_not_move_ema_or_band():
@@ -26,17 +28,14 @@ def test_none_does_not_move_ema_or_band():
 
 def test_transition_to_mostly_hindi_fires_once():
     tracker = LanguageBandTracker(alpha=0.4, initial=0.5)
-    # 0.70 exactly does not cross the > 0.70 boundary...
-    assert tracker.observe(1.0) is None
-    # ...the next Hindi-heavy turn does, and the change is reported once.
+    # A clearly Hindi utterance changes the preference immediately.
     assert tracker.observe(1.0) is Band.MOSTLY_HINDI
     assert tracker.observe(1.0) is None  # already there: no re-fire
 
 
 def test_transition_to_mostly_english():
     tracker = LanguageBandTracker(alpha=0.5, initial=0.5)
-    assert tracker.observe(0.0) is None  # ema 0.25
-    assert tracker.observe(0.0) is Band.MOSTLY_ENGLISH  # ema 0.125 < 0.20
+    assert tracker.observe(0.0) is Band.MOSTLY_ENGLISH
     assert tracker.band is Band.MOSTLY_ENGLISH
 
 

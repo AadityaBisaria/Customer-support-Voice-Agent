@@ -87,6 +87,27 @@ def qa_index() -> QAIndex:
     return QAIndex.load(Path(__file__).parent / "rag" / "corpus" / "qa.json")
 
 
+def support_store() -> SqliteSupportStore:
+    """Open the configured demo store without erasing prior call outcomes.
+
+    The default file-backed store is inspectable with any SQLite client. Tests
+    or isolated calls can opt into the old ephemeral behaviour with
+    ``SUPPORT_STORE_PATH=:memory:``.
+    """
+    configured_path = os.getenv("SUPPORT_STORE_PATH", "").strip()
+    if configured_path == ":memory:":
+        return SqliteSupportStore.seeded_in_memory(IstClock())
+
+    database_path = Path(configured_path).expanduser() if configured_path else (
+        Path(__file__).parent / "data" / "support.db"
+    )
+    if not database_path.is_absolute():
+        database_path = Path(__file__).parent / database_path
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Using persistent demo store at {}", database_path)
+    return SqliteSupportStore.seeded_at_path(IstClock(), str(database_path))
+
+
 class CallInfo(BaseModel):
     """Caller details fetched from the Twilio REST API."""
 
@@ -160,7 +181,7 @@ async def run_bot(
         getattr(runner_args, "session_id", None),
     )
     deps = SessionDeps(
-        store=SqliteSupportStore.seeded_in_memory(IstClock()),
+        store=support_store(),
         tracker=language_tracker,
         clock=IstClock(),
         transcript=transcript,
@@ -303,7 +324,7 @@ async def run_bot(
         # Every connection is a new call: fresh mock data, fresh identity,
         # fresh language estimate, no armed gate. (The eval transport reuses
         # this session across runs, so this is also what keeps runs isolated.)
-        deps.store = SqliteSupportStore.seeded_in_memory(IstClock())
+        deps.store = support_store()
         deps.customer = await deps.store.customer_by_phone(caller_phone) if caller_phone else None
         if deps.customer:
             logger.info("Caller ID matched customer {} {}", deps.customer.first_name, deps.customer.last_name)

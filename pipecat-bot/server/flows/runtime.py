@@ -13,7 +13,7 @@ from .commands import AbortFlow, Clarify, CommandBatch, EndCall, PolicyAnswer, R
 from .gate_processor import GATE_STATE_KEY, evaluate_gate
 from .slots import (DynamicOrderReferenceSlot, canonical_order_id, compact,
                     order_reference_matches, reference_tokens)
-from .speech import empty_speech
+from .speech import banded_speech, empty_speech
 from .stack import FlowFrame, FlowStack
 
 PURPOSES = {'order_status': 'status', 'cancel_order': 'cancel', 'return_order': 'return',
@@ -31,6 +31,14 @@ TERMINAL = {'nothing_here', 'wrap', 'order_status_report', 'refund_status_report
             'order_summary_report'}
 PHONE_PROMPT = 'कृपया अपना registered mobile number बताइए।'
 CLARIFICATION = 'मैं आपकी बात समझना चाहता हूँ। आपको किस order में क्या मदद चाहिए?'
+
+
+def clarification(deps) -> str:
+    return banded_speech(
+        deps,
+        'Could you tell me which order you need help with?',
+        CLARIFICATION,
+    )
 
 
 def norm(text):
@@ -158,7 +166,7 @@ def direct_transaction_flow(text):
     return None
 
 
-def verification_prompt(flow_id: str | None) -> str:
+def verification_prompt(deps, flow_id: str | None) -> str:
     prompts = {
         'order_status': 'आपके orders retrieve करने से पहले मुझे आपकी identity verify करनी है। अपना registered mobile number बताइए।',
         'cancel_order': 'Cancellation request check करने से पहले मुझे आपकी identity verify करनी है। अपना registered mobile number बताइए।',
@@ -168,7 +176,17 @@ def verification_prompt(flow_id: str | None) -> str:
         'missing_delivery': 'Delivery investigation open करने से पहले मुझे आपकी identity verify करनी है। अपना registered mobile number बताइए।',
         'refund_status': 'Refund details check करने से पहले मुझे आपकी identity verify करनी है। अपना registered mobile number बताइए।',
     }
-    return prompts.get(flow_id, PHONE_PROMPT)
+    english = {
+        'order_status': 'To retrieve your orders, I need to verify your identity. Please provide your registered mobile number.',
+        'cancel_order': 'To check your cancellation request, I need to verify your identity. Please provide your registered mobile number.',
+        'return_order': 'To start a return request, I need to verify your identity. Please provide your registered mobile number.',
+        'exchange_item': 'To check exchange options, I need to verify your identity. Please provide your registered mobile number.',
+        'reschedule_delivery': 'To reschedule a delivery, I need to verify your identity. Please provide your registered mobile number.',
+        'missing_delivery': 'To open a delivery investigation, I need to verify your identity. Please provide your registered mobile number.',
+        'refund_status': 'To check refund details, I need to verify your identity. Please provide your registered mobile number.',
+    }
+    return banded_speech(deps, english.get(flow_id, 'Please provide your registered mobile number.'),
+                         prompts.get(flow_id, PHONE_PROMPT))
 
 
 class CommandRuntime:
@@ -214,7 +232,7 @@ class CommandRuntime:
 
     def phone_prompt(self):
         suspended = self.stack.frames[-2] if len(self.stack.frames) >= 2 else None
-        return verification_prompt(suspended.flow_id if suspended else None)
+        return verification_prompt(self.deps, suspended.flow_id if suspended else None)
 
     def remember_capabilities(self, *, title, now, later=(), unavailable=()):
         """Keep a short factual hand-off after an eligibility refusal."""
@@ -232,6 +250,13 @@ class CommandRuntime:
         now = ', '.join(context['now'])
         later = ', '.join(context['later'])
         unavailable = ', '.join(context['unavailable'])
+        if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+            parts = [f"For {context['title']}, you can currently {now}."]
+            if later:
+                parts.append(f"After delivery, you can {later}.")
+            if unavailable:
+                parts.append(f"Right now, {unavailable} is not available.")
+            return ' '.join(parts)
         parts = [f"{context['title']} के लिए अभी आप {now} कर सकते हैं."]
         if later:
             parts.append(f"Delivery के बाद {later}.")
@@ -248,8 +273,11 @@ class CommandRuntime:
         ))
 
     def policy_abstention(self):
-        answer = ('मेरे पास इस specific policy की verified जानकारी नहीं है। मैं orders, returns, '
-                  'refunds, exchanges, और delivery से जुड़े सवालों में मदद कर सकता हूँ।')
+        answer = banded_speech(
+            self.deps,
+            'I do not have verified information about that specific policy. I can help with questions about orders, returns, refunds, exchanges, and delivery.',
+            'मेरे पास इस specific policy की verified जानकारी नहीं है। मैं orders, returns, refunds, exchanges, और delivery से जुड़े सवालों में मदद कर सकता हूँ।',
+        )
         return answer + (' ' + self.render() if self.node and self.stack.active else '')
 
     async def order_surface(self, *, presentation_ids=None):
@@ -322,6 +350,19 @@ class CommandRuntime:
         }
         candidates = [order for order in orders if order.status in eligible_statuses.get(action, set())]
         self._open_triage(reason='entity_not_found')
+        if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+            base = f'I could not find "{entity_query}" on this account. '
+            if len(candidates) == 1:
+                order = candidates[0]
+                titles = ', '.join(order.item_titles)
+                action_word = {
+                    'cancel_order': 'cancel', 'return_order': 'return',
+                    'exchange_item': 'exchange', 'reschedule_delivery': 'reschedule',
+                    'missing_delivery': 'investigate',
+                }.get(action, 'check')
+                return (base + f'The eligible order is {titles} ({order.order_id}). '
+                        f'Would you like to {action_word} it?')
+            return base + 'Please provide the product name or order ID again.'
         base = (f'मुझे आपके account में "{entity_query}" नहीं मिला। ')
         if len(candidates) == 1:
             order = candidates[0]
@@ -354,7 +395,7 @@ class CommandRuntime:
             self.node = None
             self.current_node = 'verify_phone'
             self.event('verification_required', action=action, source=source)
-            return verification_prompt(action)
+            return verification_prompt(self.deps, action)
         if action in {'refund_status'} or not entity_query:
             return await self.apply(CommandBatch.model_validate({'commands': [{
                 'type': 'START_FLOW', 'request_id': 'resolved_' + uuid4().hex[:8],
@@ -413,16 +454,24 @@ class CommandRuntime:
             if status in {'shipped', 'out_for_delivery'}:
                 self.remember_capabilities(
                     title=title,
-                    now=('delivery track', 'delivery reschedule'),
-                    later=('damage, defect, या wrong item report कर सकते हैं'),
-                    unavailable=('cancel या refund',),
+                    now=('track the delivery', 'reschedule the delivery') if self.deps.tracker.band.value == 'MOSTLY_ENGLISH' else ('delivery track', 'delivery reschedule'),
+                    later=('report damage, a defect, or a wrong item',) if self.deps.tracker.band.value == 'MOSTLY_ENGLISH' else ('damage, defect, या wrong item report कर सकते हैं'),
+                    unavailable=('cancellation or refund',) if self.deps.tracker.band.value == 'MOSTLY_ENGLISH' else ('cancel या refund',),
                 )
             self._open_triage(reason='cancel_ineligible')
             if status == 'delivered':
+                if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                    return (f'Your {title} has already been delivered, so it cannot be cancelled. '
+                            'If the item is eligible, I can check return or exchange options.')
                 return (f'आपका {title} already delivered है, इसलिए इसे cancel नहीं किया जा सकता। '
                         'अगर item eligible है तो return या exchange options check किए जा सकते हैं।')
             if status == 'cancelled':
+                if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                    return f'Your {title} order has already been cancelled. I can check its refund status.'
                 return f'आपका {title} order पहले ही cancelled है। मैं उसका refund status check कर सकता हूँ।'
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return (f'Your {title} has already been dispatched, so cancellation is not available. '
+                        'I can help you track or reschedule the delivery.')
             return (f'आपका {title} dispatch हो चुका है, इसलिए cancellation available नहीं है। '
                     'मैं delivery track या reschedule करने में मदद कर सकता हूँ।')
         if action in {'return_order', 'exchange_item'} and status != 'delivered':
@@ -434,13 +483,20 @@ class CommandRuntime:
                     unavailable=('return, exchange, या refund',),
                 )
             self._open_triage(reason='return_before_delivery')
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return (f'Your {title} has not been delivered yet, so a return or exchange cannot be started now. '
+                        'I can help you track or reschedule the delivery.')
             return (f'आपका {title} अभी delivered नहीं है, इसलिए return या exchange अभी शुरू नहीं हो सकता। '
                     'मैं delivery track या reschedule करने में मदद कर सकता हूँ।')
         if action == 'reschedule_delivery' and status not in {'shipped', 'out_for_delivery'}:
             self._open_triage(reason='reschedule_ineligible')
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return f'There is no active shipment for your {title} that can be rescheduled.'
             return f'आपके {title} के लिए कोई active shipment नहीं है जिसे reschedule किया जा सके।'
         if action == 'missing_delivery' and status != 'delivered':
             self._open_triage(reason='dispute_before_delivery')
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return f'Your {title} is not marked as delivered, so a missing-delivery investigation cannot be started.'
             return f'आपका {title} अभी delivered marked नहीं है, इसलिए missing-delivery investigation शुरू नहीं हो सकती।'
 
         self.state.pop('last_capabilities', None)
@@ -521,14 +577,24 @@ class CommandRuntime:
         frame.slots['order_ref'] = matches[0]
         title = order.item_titles[0] if order.item_titles else 'यह order'
         if frame.flow_id == 'cancel_order' and order.status.value != 'placed':
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                if order.status.value == 'delivered':
+                    return f'Your {title} has already been delivered, so it cannot be cancelled. I can check return options if it is eligible.'
+                return f'Your {title} has already been dispatched, so cancellation is not available. I can check return eligibility after delivery.'
             if order.status.value == 'delivered':
                 return f'यह {title} पहले ही deliver हो चुका है, इसलिए इसे cancel नहीं किया जा सकता। अगर item eligible है, मैं return options check कर सकता हूँ।'
             return f'यह {title} dispatch हो चुका है, इसलिए cancellation available नहीं है। Delivery के बाद मैं return eligibility check कर सकता हूँ।'
         if frame.flow_id in {'return_order', 'exchange_item'} and order.status.value != 'delivered':
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return f'Your {title} has not been delivered yet, so return or exchange is not available at the moment.'
             return f'यह {title} अभी deliver नहीं हुआ है, इसलिए return या exchange अभी available नहीं है।'
         if frame.flow_id == 'reschedule_delivery' and order.status.value not in {'shipped', 'out_for_delivery'}:
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return f'There is no active shipment for your {title} that can be rescheduled.'
             return f'इस {title} के लिए कोई active shipment नहीं है जिसे reschedule किया जा सके।'
         if frame.flow_id == 'missing_delivery' and order.status.value != 'delivered':
+            if self.deps.tracker.band.value == 'MOSTLY_ENGLISH':
+                return f'A missing-delivery investigation for {title} can only be opened after the order is delivered.'
             return f'इस {title} के लिए missing-delivery investigation तभी खोली जा सकती है जब order delivered हो।'
         return None
 
@@ -571,10 +637,17 @@ class CommandRuntime:
                         self.state.pop('pending_intent', None)
                         self.deps.verify_attempts = 0
                         self.auth_failed = True
-                        return ('आपका account verify नहीं हो पाया। मैं general policy questions में '
-                                'मदद कर सकता हूँ।')
-                    return (f'आपने {len(digits)} digits बताए हैं। Registered mobile number 10 digits '
-                            f'का होना चाहिए। कृपया फिर से बताइए।')
+                        return banded_speech(
+                            self.deps,
+                            'I could not verify an account. I can still help with general policy questions.',
+                            'आपका account verify नहीं हो पाया। मैं general policy questions में मदद कर सकता हूँ।',
+                        )
+                    return banded_speech(
+                        self.deps,
+                        f'I heard {len(digits)} digits. A registered mobile number must have 10 digits. Please try again.',
+                        f'आपने {len(digits)} digits बताए हैं। Registered mobile number 10 digits '
+                        f'का होना चाहिए। कृपया फिर से बताइए।',
+                    )
                 return None
             customer = await self.deps.store.customer_by_phone(PhoneNumber.parse(result.value))
             if customer is None:
@@ -586,8 +659,16 @@ class CommandRuntime:
                     self.state.pop('pending_intent', None)
                     self.deps.verify_attempts = 0
                     self.auth_failed = True
-                    return 'आपका account verify नहीं हुआ। मैं general policy questions में मदद कर सकता हूँ।'
-                return 'इस registered mobile number से कोई account नहीं मिला। कृपया सही registered mobile number बताइए।'
+                    return banded_speech(
+                        self.deps,
+                        'I could not verify an account. I can still help with general policy questions.',
+                        'आपका account verify नहीं हुआ। मैं general policy questions में मदद कर सकता हूँ।',
+                    )
+                return banded_speech(
+                    self.deps,
+                    'There is no account registered to that mobile number. Please provide a valid registered mobile number.',
+                    'इस registered mobile number से कोई account नहीं मिला। कृपया सही registered mobile number बताइए।',
+                )
             self.deps.customer = customer
             self.deps.verify_attempts = 0
             self.stack.complete()
@@ -724,7 +805,7 @@ class CommandRuntime:
                 raise ValueError('Conversation controls cannot share a mutation batch')
             command = batch.commands[0]
             if isinstance(command, Clarify):
-                return CLARIFICATION
+                return clarification(self.deps)
             if isinstance(command, PolicyAnswer):
                 if not sources or command.source_id not in sources:
                     raise ValueError('Unknown policy source')
@@ -735,7 +816,11 @@ class CommandRuntime:
             self.ended = True
             self.state.pop('pending', None)
             self.state.pop(GATE_STATE_KEY, None)
-            return 'धन्यवाद। आपका दिन अच्छा रहे!'
+            return banded_speech(
+                self.deps,
+                'Thank you. Have a good day!',
+                'धन्यवाद। आपका दिन अच्छा रहे!',
+            )
         self.stack.apply(batch)
         # Stack application is atomic. Once it succeeds, an armed mutation for
         # an old target must not survive to a later confirmation.

@@ -6,6 +6,7 @@ from flows.commands import CommandBatch, CompilerBatch, vertex_compiler_schema
 from flows.runtime import CommandRuntime
 from flows.slots import DynamicOrderReferenceSlot
 from flows.stack import FlowStack
+from language import Band
 from rag.index import QAEntry
 from store.domain import OrderId, OrderStatus, PhoneNumber
 
@@ -150,6 +151,16 @@ async def test_hindi_inflected_item_resolves_after_verification(deps):
     assert 'delivered' in answer
     assert runtime.current_node == 'triage'
     assert not runtime.stack.frames
+
+
+async def test_english_band_uses_english_verification_prompt(deps):
+    assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+    runtime = CommandRuntime(deps)
+
+    prompt = await runtime.apply(batch(resolve('return_order', 'phone case')))
+
+    assert prompt.startswith('To start a return request')
+    assert not any('ऀ' <= char <= 'ॿ' for char in prompt)
 
 
 async def test_unmatched_post_verification_entity_does_not_default_to_eligible_order(deps):
