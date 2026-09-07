@@ -328,6 +328,35 @@ async def test_active_exchange_reason_and_variant_are_fit_before_routing(deps):
     assert 'exchange' in answer
 
 
+async def test_invalid_reason_is_explained_and_reprompted_without_compiler(deps):
+    assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+    runtime = await verified(deps)
+    await runtime.apply(batch(start('return_order'), slot('order_ref', 'AMZ-1002'), slot('item_ref', '3')))
+
+    answer = await runtime.shortcut('exercise issue')
+
+    assert '"exercise issue" is not a valid issue' in answer
+    assert 'damage, defect, wrong item, missing parts, size issue' in answer
+    assert runtime.current_node == 'select_reason'
+    assert 'reason' not in runtime.stack.active.slots
+
+
+async def test_single_refund_option_enters_confirmation_and_accepts_punjabi_yes(deps):
+    assert deps.tracker.observe(0.0) is Band.MOSTLY_ENGLISH
+    runtime = await verified(deps)
+
+    prompt = await runtime.apply(batch(
+        start('return_order'), slot('order_ref', 'AMZ-1002'),
+        slot('item_ref', '3'), slot('reason', 'size_issue'),
+    ))
+
+    assert runtime.current_node == 'confirm_mutation'
+    assert prompt.startswith('I can offer you a refund for the running shoes')
+    result = await runtime.shortcut('ਹਾਂਜੀ')
+    assert runtime.current_node == 'triage'
+    assert 'return is created' in result
+
+
 @pytest.mark.parametrize('utterance', ['refund दे दो', 'refund नहीं, exchange', 'refund ఏదో'])
 async def test_resolution_uses_semantic_live_option_fitting(deps, utterance):
     runtime = await verified(deps)

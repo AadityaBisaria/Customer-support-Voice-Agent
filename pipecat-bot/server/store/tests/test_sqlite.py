@@ -28,6 +28,14 @@ def store() -> SqliteSupportStore:
 
 
 class TestMigrations:
+    def test_file_database_uses_wal_for_concurrent_viewers(self, tmp_path):
+        conn = connect(str(tmp_path / "store.db"))
+        try:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+            assert conn.execute("PRAGMA busy_timeout").fetchone()[0] > 0
+        finally:
+            conn.close()
+
     def test_connect_twice_is_idempotent(self, tmp_path):
         path = str(tmp_path / "store.db")
         conn1 = connect(path)

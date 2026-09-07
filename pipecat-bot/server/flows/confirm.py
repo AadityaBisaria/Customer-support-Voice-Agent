@@ -7,6 +7,7 @@ key and moves to a done/cancelled/failed node built from the actual result.
 """
 
 from datetime import datetime, timedelta
+import sqlite3
 from uuid import uuid4
 
 from loguru import logger
@@ -99,6 +100,22 @@ async def _on_decision(deps: SessionDeps, flow_manager, yes: bool) -> None:
     try:
         text = await _execute(deps, pending)
         node = await make_wrap(deps, flow_manager, text, name="mutation_done")
+    except sqlite3.OperationalError as error:
+        logger.warning("mutation {} blocked by SQLite: {}", pending.op, error)
+        event = getattr(flow_manager, "event", None)
+        if event:
+            event(
+                "mutation_busy",
+                operation=pending.op,
+                idempotency_key=pending.idempotency_key,
+                sqlite_error=str(error),
+            )
+        node = await make_wrap(
+            deps,
+            flow_manager,
+            "Tell the user the order system is briefly busy, so no change was made. Ask them to try again shortly.",
+            name="mutation_failed",
+        )
     except PolicyError as e:
         node = await make_wrap(
             deps,
@@ -109,6 +126,14 @@ async def _on_decision(deps: SessionDeps, flow_manager, yes: bool) -> None:
         )
     except Exception:
         logger.exception("mutation {} failed", pending.op)
+        event = getattr(flow_manager, "event", None)
+        if event:
+            event(
+                "mutation_failed",
+                operation=pending.op,
+                idempotency_key=pending.idempotency_key,
+                error_type="unexpected",
+            )
         node = await make_wrap(
             deps,
             flow_manager,

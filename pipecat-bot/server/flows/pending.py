@@ -92,9 +92,9 @@ def refund_line_for(band: Band, *, amount: Money, method: str, expected: datetim
 def return_readback(band: Band, *, title: str, reason: str, refund_line: str) -> str:
     return _banded(
         band,
-        f"Creating a return for the {title}, reason {reason}.{refund_line} Should I go ahead?",
-        f"{title} का return बना दूं, reason {reason}?{refund_line} हां या नहीं बोलिए.",
-        f"{title} का return बना दूं, कारण {reason}?{refund_line} हां या नहीं बोलिए.",
+        f"I can offer you a refund for the {title}, reason {reason}.{refund_line} Shall I create the return?",
+        f"मैं {title} के लिए refund offer कर सकता हूँ, reason {reason}.{refund_line} क्या मैं return create कर दूँ?",
+        f"मैं {title} के लिए refund offer कर सकता हूँ, कारण {reason}.{refund_line} क्या मैं return create कर दूँ?",
     )
 
 

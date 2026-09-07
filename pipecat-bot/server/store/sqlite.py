@@ -78,6 +78,8 @@ from .policy import (
 )
 
 PICKUP_LEAD = timedelta(days=2)
+_SQLITE_BUSY_TIMEOUT_MS = 2_000
+_SQLITE_WRITE_RETRY_DELAYS = (0.05, 0.20)
 
 MIGRATIONS: list[str] = [
     # -- v1: initial schema -------------------------------------------------
@@ -216,9 +218,21 @@ MIGRATIONS: list[str] = [
 
 
 def connect(path: str = ":memory:") -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+    conn = sqlite3.connect(
+        path,
+        check_same_thread=False,
+        isolation_level=None,
+        timeout=_SQLITE_BUSY_TIMEOUT_MS / 1000,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(f"PRAGMA busy_timeout = {_SQLITE_BUSY_TIMEOUT_MS}")
+    # WAL lets SQLite readers (including DB Browser for SQLite) see a stable
+    # snapshot while the bot commits a mutation. A second writer still
+    # serializes, which is why write calls also have a bounded retry below.
+    if path != ":memory:":
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     for i, script in enumerate(MIGRATIONS[version:], start=version):
         conn.executescript(script)
@@ -366,6 +380,20 @@ class SqliteSupportStore:
             if has_seed_data is None:
                 seed(store._conn, clock.now())
         return store
+
+    @staticmethod
+    def _is_busy_error(error: sqlite3.OperationalError) -> bool:
+        return "locked" in str(error).casefold() or "busy" in str(error).casefold()
+
+    async def _write_with_retry(self, operation, *args):
+        """Retry only transient SQLite lock contention; mutations stay idempotent."""
+        for attempt, delay in enumerate((*_SQLITE_WRITE_RETRY_DELAYS, None)):
+            try:
+                return await asyncio.to_thread(operation, *args)
+            except sqlite3.OperationalError as error:
+                if not self._is_busy_error(error) or delay is None:
+                    raise
+                await asyncio.sleep(delay)
 
     # ----------------------------------------------------------- Reads
     async def customer_by_phone(self, phone: PhoneNumber) -> Customer | None:
@@ -646,7 +674,7 @@ class SqliteSupportStore:
 
     # ------------------------------------------------------- Mutations
     async def cancel_order(self, *, order_id: OrderId, idempotency_key: str) -> CancelResult:
-        return await asyncio.to_thread(self._cancel_order, order_id, idempotency_key)
+        return await self._write_with_retry(self._cancel_order, order_id, idempotency_key)
 
     def _cancel_order(self, order_id: OrderId, idempotency_key: str) -> CancelResult:
         now = self._clock.now()
@@ -724,7 +752,7 @@ class SqliteSupportStore:
         refund_destination: RefundDestination | None,
         idempotency_key: str,
     ) -> ReturnResult:
-        return await asyncio.to_thread(
+        return await self._write_with_retry(
             self._create_case,
             order_item_id,
             reason,
@@ -736,7 +764,7 @@ class SqliteSupportStore:
     async def create_replacement(
         self, *, order_item_id: OrderItemId, reason: ReturnReason, idempotency_key: str
     ) -> ReturnResult:
-        return await asyncio.to_thread(
+        return await self._write_with_retry(
             self._create_case, order_item_id, reason, Resolution.REPLACEMENT, None, idempotency_key
         )
 
@@ -875,7 +903,7 @@ class SqliteSupportStore:
         reason: ReturnReason,
         idempotency_key: str,
     ) -> ReturnResult:
-        return await asyncio.to_thread(
+        return await self._write_with_retry(
             self._create_exchange, order_item_id, new_variant_id, reason, idempotency_key
         )
 
@@ -967,7 +995,7 @@ class SqliteSupportStore:
         instructions: str | None,
         idempotency_key: str,
     ) -> Delivery:
-        return await asyncio.to_thread(
+        return await self._write_with_retry(
             self._reschedule_delivery, delivery_id, new_date, slot, instructions, idempotency_key
         )
 
@@ -1037,7 +1065,7 @@ class SqliteSupportStore:
         mode: PaymentCollectionMode,
         idempotency_key: str,
     ) -> Order:
-        return await asyncio.to_thread(
+        return await self._write_with_retry(
             self._update_payment_collection_mode, order_id, mode, idempotency_key
         )
 
@@ -1073,7 +1101,7 @@ class SqliteSupportStore:
     async def submit_dispute_ticket(
         self, *, ticket: DisputeTicket, idempotency_key: str
     ) -> DisputeId:
-        return await asyncio.to_thread(self._submit_dispute_ticket, ticket, idempotency_key)
+        return await self._write_with_retry(self._submit_dispute_ticket, ticket, idempotency_key)
 
     def _submit_dispute_ticket(self, ticket: DisputeTicket, idempotency_key: str) -> DisputeId:
         now = self._clock.now()
@@ -1113,7 +1141,7 @@ class SqliteSupportStore:
     async def record_order_feedback(
         self, *, feedback: OrderFeedback, idempotency_key: str
     ) -> None:
-        await asyncio.to_thread(self._record_order_feedback, feedback, idempotency_key)
+        await self._write_with_retry(self._record_order_feedback, feedback, idempotency_key)
 
     def _record_order_feedback(self, feedback: OrderFeedback, idempotency_key: str) -> None:
         now = self._clock.now()

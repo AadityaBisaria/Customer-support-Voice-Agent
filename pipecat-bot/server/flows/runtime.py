@@ -76,7 +76,8 @@ def confirmation_affirmative(text):
     words = set(normalized.split())
     if words & negative:
         return False
-    yes = {'yes', 'haan', 'han', 'haa', 'ji', 'bilkul', 'zaroor', 'sure', 'हाँ', 'हां', 'जी', 'बिलकुल'}
+    yes = {'yes', 'yeah', 'yep', 'haan', 'han', 'haa', 'ji', 'haanji', 'hanji', 'bilkul', 'zaroor',
+           'sure', 'हाँ', 'हां', 'जी', 'हाँजी', 'ਹਾਂਜੀ', 'ਹਾਂ', 'बिलकुल'}
     action = ('kar do', 'kar dijiye', 'kardo', 'कर दो', 'कर दीजिए')
     return bool(words & yes) or any(phrase in normalized for phrase in action)
 
@@ -95,6 +96,15 @@ def fit_reason(text):
     }
     return next((reason for reason, aliases in surfaces.items()
                  if any(alias in normalized for alias in aliases)), None)
+
+
+def looks_like_reason_attempt(text: str) -> bool:
+    """Identify an attempted reason without stealing unrelated mid-flow FAQs."""
+    normalized = norm(text)
+    return any(word in normalized for word in (
+        'issue', 'problem', 'reason', 'damage', 'defect', 'broken', 'fitting',
+        'खराब', 'समस्या', 'issue',
+    ))
 
 
 def fit_variant_reference(text):
@@ -554,6 +564,16 @@ class CommandRuntime:
         if self.current_node == 'select_reason':
             reason = fit_reason(text)
             if reason is None:
+                if looks_like_reason_attempt(text):
+                    attempted = ' '.join(text.strip().split())[:80]
+                    self.event('slot_fit_rejected', node=self.current_node,
+                               slot='reason', attempted_value=attempted)
+                    prefix = banded_speech(
+                        self.deps,
+                        f'"{attempted}" is not a valid issue for this item.',
+                        f'"{attempted}" इस item के लिए valid issue नहीं है।',
+                    )
+                    return f'{prefix} {self.render()}'
                 return None
             self.stack.active.slots['reason'] = reason
             # A caller commonly answers "size issue, large" in one turn.

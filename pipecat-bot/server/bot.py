@@ -193,9 +193,7 @@ async def run_bot(
         except ValueError:
             logger.info("Caller number {} not usable for lookup", caller_number)
 
-    # Speech-to-Text: Sarvam realtime (saaras:v3-realtime), codemix mode for Hinglish.
-    # Server-side VAD does the endpointing; should_interrupt=False keeps backchannels
-    # ("haan", "achha") from barging in while the bot is speaking.
+
     stt = SarvamRealtimeSTTService(
         api_key=os.getenv("SARVAM_API_KEY"),
         should_interrupt=False,
@@ -206,11 +204,7 @@ async def run_bot(
         ),
     )
 
-    # Text-to-Speech: Sarvam bulbul:v3 speaks code-mixed Devanagari+Latin in one pass,
-    # so one voice covers any Hindi/English blend. The service defaults to bulbul:v2 —
-    # the model must be set explicitly.
-    # Sarvam bulbul:v3 defaults to a 24 kHz output; forcing 8 kHz makes the
-    # delivered PCM sound garbled/static even when the TTS backend is working.
+   
     tts = SarvamTTSService(
         api_key=os.getenv("SARVAM_API_KEY"),
         sample_rate=int(os.getenv("SARVAM_TTS_SAMPLE_RATE", "24000")),
@@ -222,7 +216,6 @@ async def run_bot(
         ),
     )
 
-    # LLM service: Gemini through Vertex AI using a service-account credential.
     vertex_project_id = os.getenv("VERTEX_PROJECT_ID", "gen-lang-client-0158129197")
     vertex_credentials_path = os.getenv(
         "VERTEX_CREDENTIALS_PATH",

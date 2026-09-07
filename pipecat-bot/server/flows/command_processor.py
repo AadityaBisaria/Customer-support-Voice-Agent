@@ -54,10 +54,11 @@ class CommandProcessor(FrameProcessor):
         await self.push_frame(LLMFullResponseEndFrame())
 
     async def greet(self):
-        # There is no caller language signal yet. A short neutral English
-        # greeting avoids pre-committing the conversation to Hinglish; the
-        # first final user utterance selects the response band.
-        await self.speak('Hello, welcome to Aryan Retail. How can I help?', self.generation)
+        # There is no caller language signal yet, so start in the product's
+        # default Hinglish style. The first final caller utterance can still
+        # immediately switch all later responses to English.
+        await self.speak('नमस्ते! मैं Aryan Retail assistant हूँ। मैं आपकी कैसे मदद कर सकता हूँ?',
+                         self.generation)
 
     @staticmethod
     def _lexical_tokens(text):

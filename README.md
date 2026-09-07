@@ -31,8 +31,8 @@ rescheduling now, and explain what may be available after delivery.
 
 ## Demo seed data
 
-Each session receives a newly seeded in-memory store. Use these registered
-numbers when asked to verify identity.
+On the first local run, the persistent demo store is seeded with the scenarios
+below. Use these registered numbers when asked to verify identity.
 
 | Customer | Registered mobile number | Useful scenarios |
 | --- | --- | --- |
@@ -44,7 +44,24 @@ numbers when asked to verify identity.
 Seed dates are relative to the session clock. The source is
 `pipecat-bot/server/store/seed.py`.
 
-## Verification behavior
+## Persistent demo database
+
+By default the bot creates `pipecat-bot/server/data/support.db`. It seeds this
+file only when it is empty, so a cancellation, return, exchange, or reschedule
+you complete during one call remains visible in the next call. The database is
+local-only and ignored by Git.
+
+Inspect it with a SQLite browser, or from `pipecat-bot/server`:
+
+```powershell
+sqlite3 data/support.db ".tables"
+sqlite3 data/support.db "SELECT id, status, placed_at FROM orders;"
+```
+
+To run with a disposable, newly seeded store for every connection, set
+`SUPPORT_STORE_PATH=:memory:` in `server/.env`. To reset the local demo,
+stop the bot and remove `data/support.db` (and its `-wal`/`-shm` companion
+files if present); the next launch creates a clean seeded database.
 
 Account-specific requests are suspended until the caller is verified.
 
@@ -86,6 +103,8 @@ VERTEX_PROJECT_ID=...
 VERTEX_CREDENTIALS_PATH=C:\path\to\service-account.json
 VERTEX_LOCATION=asia-south1
 VERTEX_MODEL=gemini-2.5-flash
+# Optional: empty means server/data/support.db; use :memory: for isolated calls.
+SUPPORT_STORE_PATH=
 ```
 
 `VERTEX_CREDENTIALS_PATH` must point to a service-account JSON file; do not

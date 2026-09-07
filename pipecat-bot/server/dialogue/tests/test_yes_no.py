@@ -36,6 +36,8 @@ async def fit(said: str):
         "कर दो",
         "बिल्कुल",
         "हाँ कर दो",
+        "ਹਾਂਜੀ",
+        "yeah",
     ],
 )
 async def test_yes(said: str):

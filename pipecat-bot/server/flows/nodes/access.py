@@ -44,12 +44,12 @@ async def make_greet_unauth(deps, flow_manager) -> dict:
             routing(
                 "start_order_help",
                 "Call immediately (without asking) when the user mentions their order or account: "
-                "status, return, exchange, replacement, refund, delivery reschedule, dispute, or cancellation.",
+                "status, r sorry about that so yeah if they want to enter in node it's basically just a static state for what process or what point they're in and we can obviously shift from each process to another as you saw I tried to enter my return order policy but then you know we're missing a step of like we actually verifying the user's identity so first we have to verify the user's identity and then we return back to our original node and then beyond that obviously we can you know go and give the all on the correct tools for each job narrative plans are going to go bothers and I mean that's awesome that's crazy like I mean I begin to returneturn, exchange, replacement, refund, delivery reschedule, dispute, or cancellation.",
                 _order_help_entry,
             ),
             routing(
                 "start_order_status",
-                "The caller wants their order list, order status, tracking, or delivery ETA.",
+                "The caller wants their order list, order status, tracking, or delivery ETA.", 
                 lambda d, fm: _order_help_entry(d, fm, "status"),
             ),
             routing(
